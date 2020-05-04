@@ -1,0 +1,35 @@
+[package]
+name = "iota_stream_poc"
+version = "0.1.0"
+authors = ["Yolier Galán Tassé <gallegogt@gmail.com>"]
+edition = "2018"
+
+[lib]
+name = "poc"
+path = "src/lib.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]] # Bin to run the HelloWorld gRPC server
+name = "author"
+path = "src/bin/author.rs"
+
+[[bin]] # Bin to run the HelloWorld gRPC client
+name = "subscriber"
+path = "src/bin/subscriber.rs"
+
+
+[dependencies]
+iota-streams = { git = "https://github.com/iotaledger/streams.git" }
+# iota-streams = { path = "../streams" }
+failure = "0.1.7"
+iota-core = { git = "https://github.com/iotaledger/iota.rs.git" }
+iota-conversion = { git = "https://github.com/iotaledger/iota.rs.git" }
+tokio = { version = "^0.2", features = ["full"] }
+async-trait = "0.1.30"
+chrono = "0.4"
+
+[profile.release]
+lto = true
+opt-level = 3
+codegen-units = 1
