@@ -1,12 +1,14 @@
 use failure::Fallible;
 use iota::Client;
 use iota_streams::{
-    app_channels::api::tangle::{Address, Author, DefaultTW, Message},
-    core::tbits::Tbits,
+    app_channels::{
+        api::tangle::{Address, Author, DefaultTW},
+        message,
+    },
     protobuf3::types::Trytes,
 };
-use poc::transport::AsyncTransport;
-use std::{env, process::exit, str::FromStr};
+use poc::transport::{recv_messages, send_message, AsyncTransport, PayloadBuilder, TPacket};
+use std::{env, process::exit, time::Duration};
 
 #[tokio::main]
 async fn main() -> Fallible<()> {
@@ -22,9 +24,10 @@ async fn main() -> Fallible<()> {
     let mut author = Author::new(&args[1], 3, true);
 
     println!(
-        "\t\tChannel Adress = {} \t <== (^Copy this Address for the Subscriber)\n",
+        "\t\tChannel Adress = {} <== (^Copy this Address for the Subscriber)\n",
         author.channel_address()
     );
+
     let (announcement_address, announcement_tag) = {
         let msg = &author.announce()?;
         println!(
@@ -40,6 +43,16 @@ async fn main() -> Fallible<()> {
     // Annuncement Link
     let announcement_link = Address::from_str(&announcement_address, &announcement_tag).unwrap();
 
+    // Simulate wait for subscribers
+    // =======================================
+    println!("Waiting 60s for subscribers ...\n");
+    println!("Open the susbscriber NOW...\n");
+    tokio::time::delay_for(Duration::from_secs(60)).await;
+    // =======================================
+
+    println!("Accept subscribers....");
+    accept_suscribers(&mut api, &mut author, &announcement_link).await?;
+
     println!("Share keyload for everyone:");
     let keyload_link = {
         let msg = author.share_keyload_for_everyone(&announcement_link)?;
@@ -52,7 +65,9 @@ async fn main() -> Fallible<()> {
         &mut api,
         &mut author,
         &announcement_link,
-        &format!("DATADATADATA"),
+        PayloadBuilder::new()
+            .masked_data("Signed Data from Text")
+            .build(),
     )
     .await
     .unwrap();
@@ -61,7 +76,9 @@ async fn main() -> Fallible<()> {
         &mut api,
         &mut author,
         &keyload_link,
-        &format!("DATADATADATADATADATADATADAT"),
+        PayloadBuilder::new()
+            .masked_data("Tagged Payload as Text")
+            .build(),
     )
     .await
     .unwrap();
@@ -69,18 +86,19 @@ async fn main() -> Fallible<()> {
     Ok(())
 }
 
-async fn send_signed_data<'a, T>(
+async fn send_signed_data<'a, T, P>(
     client: &mut T,
     author: &mut Author,
     addrs: &Address,
-    public_data: &'a str,
+    payload: P,
 ) -> Fallible<Address>
 where
     T: AsyncTransport + Send,
     <T>::SendOptions: Copy + Default + Send,
+    P: TPacket,
 {
-    let public: Trytes<DefaultTW> = Trytes(Tbits::from_str(public_data).unwrap());
-    let masked: Trytes<DefaultTW> = Trytes(Tbits::from_str("MASKEDPAYLOAD").unwrap());
+    let public: Trytes<DefaultTW> = payload.public_data();
+    let masked: Trytes<DefaultTW> = payload.masked_data();
 
     let signed_packet_link = {
         let msg = author.sign_packet(&addrs, &public, &masked)?;
@@ -91,21 +109,22 @@ where
     Ok(signed_packet_link)
 }
 
-async fn send_tagged_data<'a, T>(
+async fn send_tagged_data<'a, T, P>(
     client: &mut T,
     author: &mut Author,
     addrs: &Address,
-    public_data: &'a str,
+    payload: P,
 ) -> Fallible<Address>
 where
     T: AsyncTransport + Send,
     <T>::SendOptions: Copy + Default + Send,
+    P: TPacket,
 {
-    let public_payload: Trytes<DefaultTW> = Trytes(Tbits::from_str(public_data).unwrap());
-    let masked_payload: Trytes<DefaultTW> = Trytes(Tbits::from_str("MASKEDPAYLOAD").unwrap());
+    let public: Trytes<DefaultTW> = payload.public_data();
+    let masked: Trytes<DefaultTW> = payload.masked_data();
 
     let tagged_packet_link = {
-        let msg = author.tag_packet(&addrs, &public_payload, &masked_payload)?;
+        let msg = author.tag_packet(&addrs, &public, &masked)?;
         println!("\t\tTag Message Tag={}", msg.link.msgid);
         send_message(client, &msg).await.unwrap();
         msg.link.clone()
@@ -113,11 +132,39 @@ where
     Ok(tagged_packet_link)
 }
 
-async fn send_message<T>(transport: &mut T, message: &Message) -> Fallible<()>
-where
-    T: AsyncTransport + Send,
-    <T>::SendOptions: Copy + Default + Send,
-{
-    let _transaction = transport.send_message(message).await?;
+///
+/// Accept all Subscribers
+///
+async fn accept_suscribers<'a>(
+    client: &mut Client<'a>,
+    author: &mut Author,
+    channel_link: &Address,
+) -> Fallible<()> {
+    let msg_list = recv_messages(client, channel_link).await?;
+    msg_list
+        .iter()
+        .filter_map(|msg| match msg.parse_header() {
+            Ok(preparsed) => {
+                if preparsed.check_content_type(message::subscribe::TYPE) {
+                    Some(preparsed)
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        })
+        .for_each(|preparsed| {
+            author.unwrap_subscribe(preparsed).unwrap();
+            println!("Add new subscriber ....");
+        });
+
+    // for msg in msg_list.iter() {
+    //     let preparsed = msg.parse_header()?;
+    //     if preparsed.check_content_type(message::subscribe::TYPE) {
+    //         println!("Message Type {}", preparsed.content_type());
+    //         author.unwrap_subscribe(preparsed)?;
+    //     }
+    // }
+
     Ok(())
 }

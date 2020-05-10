@@ -1,10 +1,11 @@
 use failure::{ensure, Fallible};
+use iota_conversion::trytes_converter::to_string as trytes_to_string;
 use iota_streams::app_channels::{
-    api::tangle::{Address, Message, Subscriber},
+    api::tangle::{Address, Subscriber},
     message,
 };
-use poc::transport::AsyncTransport;
-use std::env;
+use poc::transport::{recv_message, recv_messages, send_message};
+use std::{env, time::Duration};
 
 #[tokio::main]
 async fn main() -> Fallible<()> {
@@ -42,67 +43,57 @@ async fn main() -> Fallible<()> {
         msg.link.clone()
     };
 
+    // Simulate waiting for Actor access
+    println!("Waiting 60s for Author send the keyload message....");
+    tokio::time::delay_for(Duration::from_secs(60)).await;
+
     let msg_list = recv_messages(&mut client, &subscribe_link).await?;
     println!("\nReceive {} Messages", msg_list.len());
 
-    for msg in msg_list.iter() {
+    for (_idx, msg) in msg_list.iter().enumerate() {
         let preparsed = msg.parse_header()?;
         if preparsed.check_content_type(message::signed_packet::TYPE) {
             match subscriber.unwrap_signed_packet(preparsed.clone()) {
                 Ok((unwrapped_public, unwrapped_masked)) => {
-                    println!("Public Packet: {}", unwrapped_public.to_string());
-                    println!("Masked Packet: {}", unwrapped_masked.to_string());
+                    println!(
+                        "Public Packet: {}",
+                        trytes_to_string(&unwrapped_public.to_string())?
+                    );
+                    println!(
+                        "Signed Masked Packet: {}",
+                        trytes_to_string(&unwrapped_masked.to_string())?
+                    );
                 }
                 Err(e) => println!("Signed Packet Error: {}", e),
             }
             continue;
         }
+
         if preparsed.check_content_type(message::tagged_packet::TYPE) {
             let rs = subscriber.unwrap_tagged_packet(preparsed.clone());
-            ensure!(rs.is_err());
+            ensure!(rs.is_ok());
             match rs {
                 Ok((unwrapped_public, unwrapped_masked)) => {
-                    println!("Tagged Public Packet: {}", unwrapped_public.to_string());
-                    println!("Tagged Masked Packet: {}", unwrapped_masked.to_string());
+                    println!(
+                        "Tagged Public Packet: {}",
+                        trytes_to_string(&unwrapped_public.to_string())?
+                    );
+                    println!(
+                        "Tagged Masked Packet: {}",
+                        trytes_to_string(&unwrapped_masked.to_string())?
+                    );
                 }
                 Err(e) => println!("Tagged Packet Error: {}", e),
             }
             continue;
         }
+
         if preparsed.check_content_type(message::keyload::TYPE) {
             let rs = subscriber.unwrap_keyload(preparsed.clone());
-            ensure!(rs.is_err());
+            ensure!(rs.is_ok());
             continue;
         }
     }
 
     Ok(())
 }
-
-async fn recv_messages<T>(transport: &mut T, addr: &Address) -> Fallible<Vec<Message>>
-where
-    T: AsyncTransport,
-    <T>::RecvOptions: Copy + Default + Send,
-{
-    transport
-        .recv_messages_with_options(addr, T::RecvOptions::default())
-        .await
-}
-
-async fn recv_message<T>(transport: &mut T, addr: &Address) -> Fallible<Option<Message>>
-where
-    T: AsyncTransport + Send,
-    <T>::RecvOptions: Copy + Default + Send,
-{
-    transport.recv_message(addr).await
-}
-
-async fn send_message<T>(transport: &mut T, message: &Message) -> Fallible<()>
-where
-    T: AsyncTransport + Send,
-    <T>::SendOptions: Copy + Default + Send,
-{
-    transport.send_message(message).await?;
-    Ok(())
-}
-
