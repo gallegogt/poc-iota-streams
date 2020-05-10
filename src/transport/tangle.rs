@@ -315,6 +315,7 @@ fn bundles_from_transactions(hashes: &Vec<Transaction>) -> Vec<Vec<Transaction>>
         }
     }
 
+    // TODO: Check the bundles
     bundles
     // .into_iter()
     // .filter_map(|txs| {
