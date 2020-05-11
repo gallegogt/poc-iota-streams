@@ -2,8 +2,8 @@
 //! Transport Base
 //!
 
+use anyhow::{bail, ensure};
 use async_trait::async_trait;
-use failure::{bail, ensure, Fallible};
 use iota_streams::app::message::TbinaryMessage;
 
 /// Network transport abstraction.
@@ -25,13 +25,13 @@ where
         &mut self,
         msg: &TbinaryMessage<TW, F, Link>,
         opt: Self::SendOptions,
-    ) -> Fallible<Self::SendOutput>;
+    ) -> anyhow::Result<Self::SendOutput>;
 
     /// Send a message with default options.
     async fn send_message(
         &mut self,
         msg: &TbinaryMessage<TW, F, Link>,
-    ) -> Fallible<Self::SendOutput>
+    ) -> anyhow::Result<Self::SendOutput>
     where
         Self::SendOptions: Default + Send,
     {
@@ -44,14 +44,14 @@ where
         &mut self,
         link: &Link,
         opt: Self::RecvOptions,
-    ) -> Fallible<Vec<TbinaryMessage<TW, F, Link>>>;
+    ) -> anyhow::Result<Vec<TbinaryMessage<TW, F, Link>>>;
 
     /// Receive messages with explicit options.
     async fn recv_message_with_options(
         &mut self,
         link: &Link,
         opt: Self::RecvOptions,
-    ) -> Fallible<Option<TbinaryMessage<TW, F, Link>>>
+    ) -> anyhow::Result<Option<TbinaryMessage<TW, F, Link>>>
     where
         Self::RecvOptions: Default + Send,
     {
@@ -65,7 +65,10 @@ where
     }
 
     /// Receive messages with default options.
-    async fn recv_messages(&mut self, link: &Link) -> Fallible<Vec<TbinaryMessage<TW, F, Link>>>
+    async fn recv_messages(
+        &mut self,
+        link: &Link,
+    ) -> anyhow::Result<Vec<TbinaryMessage<TW, F, Link>>>
     where
         Self::RecvOptions: Default + Send,
     {
@@ -74,7 +77,10 @@ where
     }
 
     /// Receive a message with default options.
-    async fn recv_message(&mut self, link: &Link) -> Fallible<Option<TbinaryMessage<TW, F, Link>>>
+    async fn recv_message(
+        &mut self,
+        link: &Link,
+    ) -> anyhow::Result<Option<TbinaryMessage<TW, F, Link>>>
     where
         Self::RecvOptions: Default + Send,
     {

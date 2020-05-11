@@ -3,7 +3,6 @@
 //!
 use async_trait::async_trait;
 use chrono::Utc;
-use failure::Fallible;
 use iota::{
     bundle::{
         Address, Bundle, Hash, Index, Nonce, OutgoingBundleBuilder, Payload, Tag, Timestamp,
@@ -180,7 +179,7 @@ where
         &mut self,
         msg: &TbinaryMessage<TW, F, TangleAddress<TW>>,
         opt: Self::SendOptions,
-    ) -> Fallible<Self::SendOutput> {
+    ) -> anyhow::Result<Self::SendOutput> {
         let timestamp = Utc::now().timestamp();
         let bundle = msg_to_bundle(&msg, timestamp);
         let mut trytes: Vec<Transaction> = bundle.into_iter().map(|x| x).collect();
@@ -203,7 +202,7 @@ where
         &mut self,
         link: &TangleAddress<TW>,
         _opt: Self::RecvOptions,
-    ) -> Fallible<Vec<TbinaryMessage<TW, F, TangleAddress<TW>>>> {
+    ) -> anyhow::Result<Vec<TbinaryMessage<TW, F, TangleAddress<TW>>>> {
         let addr_str = link.appinst.to_string();
         let _tag_str = link.msgid.to_string();
 
@@ -241,7 +240,7 @@ where
         &mut self,
         link: &TangleAddress<TW>,
         _opt: Self::RecvOptions,
-    ) -> Fallible<Option<TbinaryMessage<TW, F, TangleAddress<TW>>>> {
+    ) -> anyhow::Result<Option<TbinaryMessage<TW, F, TangleAddress<TW>>>> {
         let tag_str = link.msgid.to_string();
 
         let hashes_resp = self
