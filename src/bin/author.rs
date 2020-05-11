@@ -1,17 +1,19 @@
-use failure::Fallible;
 use iota::Client;
-use iota_streams::{
-    app_channels::{
-        api::tangle::{Address, Author, DefaultTW},
-        message,
-    },
-    protobuf3::types::Trytes,
+use iota_streams::app_channels::{
+    api::tangle::{Address, Author},
+    message,
 };
-use poc::transport::{recv_messages, send_message, AsyncTransport, PayloadBuilder, TPacket};
+use poc::{
+    sample::StreamsData,
+    transport::{
+        payload::{PacketPayload, PayloadBuilder},
+        recv_messages, send_message, AsyncTransport,
+    },
+};
 use std::{env, process::exit, time::Duration};
 
 #[tokio::main]
-async fn main() -> Fallible<()> {
+async fn main() -> anyhow::Result<()> {
     let args: Vec<_> = env::args().collect::<Vec<_>>();
     if args.len() < 2 {
         eprintln!("Usage: author <SEED>");
@@ -29,7 +31,9 @@ async fn main() -> Fallible<()> {
     );
 
     let (announcement_address, announcement_tag) = {
-        let msg = &author.announce()?;
+        let msg = &author
+            .announce()
+            .map_err(|_| anyhow::anyhow!("Error in announce"))?;
         println!(
             "\t\tAnnouncement Message Tag={} \t <= (^Copy this Tag for the Subscriber)",
             msg.link.msgid
@@ -55,7 +59,9 @@ async fn main() -> Fallible<()> {
 
     println!("Share keyload for everyone:");
     let keyload_link = {
-        let msg = author.share_keyload_for_everyone(&announcement_link)?;
+        let msg = author
+            .share_keyload_for_everyone(&announcement_link)
+            .map_err(|_| anyhow::anyhow!("Error preparing the keload for everyone"))?;
         println!("\t\tShare KeyLoad Message Tag={}", msg.link.msgid);
         send_message(&mut api, &msg).await.unwrap();
         msg.link
@@ -66,7 +72,8 @@ async fn main() -> Fallible<()> {
         &mut author,
         &announcement_link,
         PayloadBuilder::new()
-            .masked_data("Signed Data from Text")
+            .public(&StreamsData::default())
+            .masked(&StreamsData::default())
             .build(),
     )
     .await
@@ -77,7 +84,8 @@ async fn main() -> Fallible<()> {
         &mut author,
         &keyload_link,
         PayloadBuilder::new()
-            .masked_data("Tagged Payload as Text")
+            .public(&StreamsData::default())
+            .masked(&StreamsData::default())
             .build(),
     )
     .await
@@ -91,17 +99,16 @@ async fn send_signed_data<'a, T, P>(
     author: &mut Author,
     addrs: &Address,
     payload: P,
-) -> Fallible<Address>
+) -> anyhow::Result<Address>
 where
     T: AsyncTransport + Send,
     <T>::SendOptions: Copy + Default + Send,
-    P: TPacket,
+    P: PacketPayload,
 {
-    let public: Trytes<DefaultTW> = payload.public_data();
-    let masked: Trytes<DefaultTW> = payload.masked_data();
-
     let signed_packet_link = {
-        let msg = author.sign_packet(&addrs, &public, &masked)?;
+        let msg = author
+            .sign_packet(&addrs, &payload.public_data(), &payload.masked_data())
+            .map_err(|_| anyhow::anyhow!("Error to create signed packet"))?;
         println!("\t\tSigned Message ID={}", msg.link.msgid);
         send_message(client, &msg).await.unwrap();
         msg.link.clone()
@@ -114,17 +121,16 @@ async fn send_tagged_data<'a, T, P>(
     author: &mut Author,
     addrs: &Address,
     payload: P,
-) -> Fallible<Address>
+) -> anyhow::Result<Address>
 where
     T: AsyncTransport + Send,
     <T>::SendOptions: Copy + Default + Send,
-    P: TPacket,
+    P: PacketPayload,
 {
-    let public: Trytes<DefaultTW> = payload.public_data();
-    let masked: Trytes<DefaultTW> = payload.masked_data();
-
     let tagged_packet_link = {
-        let msg = author.tag_packet(&addrs, &public, &masked)?;
+        let msg = author
+            .tag_packet(&addrs, &payload.public_data(), &payload.masked_data())
+            .map_err(|_| anyhow::anyhow!("Error to create tagged packet"))?;
         println!("\t\tTag Message Tag={}", msg.link.msgid);
         send_message(client, &msg).await.unwrap();
         msg.link.clone()
@@ -139,7 +145,7 @@ async fn accept_subscribers<'a>(
     client: &mut Client<'a>,
     author: &mut Author,
     channel_link: &Address,
-) -> Fallible<()> {
+) -> anyhow::Result<()> {
     let msg_list = recv_messages(client, channel_link).await?;
     msg_list
         .iter()

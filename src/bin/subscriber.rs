@@ -1,14 +1,18 @@
-use failure::{ensure, Fallible};
-use iota_conversion::trytes_converter::to_string as trytes_to_string;
-use iota_streams::app_channels::{
-    api::tangle::{Address, Subscriber},
-    message,
+use iota_streams::{
+    app_channels::{
+        api::tangle::{Address, DefaultTW, Subscriber},
+        message,
+    },
+    protobuf3::types::Trytes,
 };
-use poc::transport::{recv_message, recv_messages, send_message};
+use poc::{
+    sample::StreamsData,
+    transport::{payload::Payload, recv_message, recv_messages, send_message},
+};
 use std::{env, time::Duration};
 
 #[tokio::main]
-async fn main() -> Fallible<()> {
+async fn main() -> anyhow::Result<()> {
     let args: Vec<_> = env::args().collect::<Vec<_>>();
 
     // tangle client
@@ -29,40 +33,42 @@ async fn main() -> Fallible<()> {
     let msg_announce = recv_message(&mut client, &announcement_link).await?;
 
     if let Some(msg) = msg_announce {
-        let preparsed = msg.parse_header()?;
+        let preparsed = msg
+            .parse_header()
+            .map_err(|_| anyhow::anyhow!("Error parsing the announce header"))?;
         if preparsed.check_content_type(message::announce::TYPE) {
-            subscriber.unwrap_announcement(preparsed)?;
+            subscriber
+                .unwrap_announcement(preparsed)
+                .map_err(|_| anyhow::anyhow!("Error unwraping the announcement message"))?;
         }
     }
 
     let subscribe_link = {
         println!("Subscribe to the channel:");
-        let msg = subscriber.subscribe(&announcement_link)?;
+        let msg = subscriber
+            .subscribe(&announcement_link)
+            .map_err(|_| anyhow::anyhow!("Error on subscriber link"))?;
+
         println!("\t\tMessage ID={}", msg.link.msgid);
-        send_message(&mut client, &msg).await?;
+        // send_message(&mut client, &msg).await?;
         msg.link.clone()
     };
 
     // Simulate waiting for Actor access
-    println!("Waiting 60s for Author send the keyload message....");
-    tokio::time::delay_for(Duration::from_secs(60)).await;
+    println!("Waiting 65s for Author send the keyload message....");
+    // tokio::time::delay_for(Duration::from_secs(65)).await;
 
     let msg_list = recv_messages(&mut client, &subscribe_link).await?;
     println!("\nReceive {} Messages", msg_list.len());
 
     for (_idx, msg) in msg_list.iter().enumerate() {
-        let preparsed = msg.parse_header()?;
+        let preparsed = msg
+            .parse_header()
+            .map_err(|_| anyhow::anyhow!("Error parsing the message header"))?;
         if preparsed.check_content_type(message::signed_packet::TYPE) {
             match subscriber.unwrap_signed_packet(preparsed.clone()) {
                 Ok((unwrapped_public, unwrapped_masked)) => {
-                    println!(
-                        "Public Packet: {}",
-                        trytes_to_string(&unwrapped_public.to_string())?
-                    );
-                    println!(
-                        "Signed Masked Packet: {}",
-                        trytes_to_string(&unwrapped_masked.to_string())?
-                    );
+                    print_sended_data("Signed", unwrapped_public, unwrapped_masked);
                 }
                 Err(e) => println!("Signed Packet Error: {}", e),
             }
@@ -71,17 +77,9 @@ async fn main() -> Fallible<()> {
 
         if preparsed.check_content_type(message::tagged_packet::TYPE) {
             let rs = subscriber.unwrap_tagged_packet(preparsed.clone());
-            ensure!(rs.is_ok());
             match rs {
                 Ok((unwrapped_public, unwrapped_masked)) => {
-                    println!(
-                        "Tagged Public Packet: {}",
-                        trytes_to_string(&unwrapped_public.to_string())?
-                    );
-                    println!(
-                        "Tagged Masked Packet: {}",
-                        trytes_to_string(&unwrapped_masked.to_string())?
-                    );
+                    print_sended_data("Tagged", unwrapped_public, unwrapped_masked);
                 }
                 Err(e) => println!("Tagged Packet Error: {}", e),
             }
@@ -90,10 +88,33 @@ async fn main() -> Fallible<()> {
 
         if preparsed.check_content_type(message::keyload::TYPE) {
             let rs = subscriber.unwrap_keyload(preparsed.clone());
-            ensure!(rs.is_ok());
+            if rs.is_err() {
+                println!("Error on unwrap_keyload")
+            }
             continue;
         }
     }
 
     Ok(())
+}
+
+///
+/// Print Sended Data
+///
+fn print_sended_data<T>(prefix: T, public: Trytes<DefaultTW>, masked: Trytes<DefaultTW>)
+where
+    T: Into<String>,
+{
+    let p_data: anyhow::Result<StreamsData> = Payload::unwrap_data(&public);
+    let m_data: anyhow::Result<StreamsData> = Payload::unwrap_data(&masked);
+    let pfx = prefix.into();
+
+    match p_data {
+        Ok(d) => println!("\n {} Public Packet: \n \t\t{:?}\n", pfx, d),
+        Err(k) => eprintln!("{:#?}", k),
+    }
+    match m_data {
+        Ok(d) => println!("\n {} Masked Packet: \n \t\t{:?}\n", pfx, d),
+        Err(k) => eprintln!("{:#?}", k),
+    }
 }
