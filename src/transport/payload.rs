@@ -38,7 +38,6 @@ impl Payload {
     {
         let raw = trytes_to_string(&data.to_string())
             .map_err(|_| anyhow::anyhow!("Error on convert payload from trytes"))?;
-        println!("BASE64 In {}", raw);
         let decode_data = decode_config(&raw, URL_SAFE_NO_PAD)?;
         Ok(serde_json::from_slice(&decode_data)?)
     }
