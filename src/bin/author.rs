@@ -51,7 +51,7 @@ async fn main() -> Fallible<()> {
     // =======================================
 
     println!("Accept subscribers....");
-    accept_suscribers(&mut api, &mut author, &announcement_link).await?;
+    accept_subscribers(&mut api, &mut author, &announcement_link).await?;
 
     println!("Share keyload for everyone:");
     let keyload_link = {
@@ -135,7 +135,7 @@ where
 ///
 /// Accept all Subscribers
 ///
-async fn accept_suscribers<'a>(
+async fn accept_subscribers<'a>(
     client: &mut Client<'a>,
     author: &mut Author,
     channel_link: &Address,
