@@ -50,13 +50,13 @@ async fn main() -> anyhow::Result<()> {
             .map_err(|_| anyhow::anyhow!("Error on subscriber link"))?;
 
         println!("\t\tMessage ID={}", msg.link.msgid);
-        // send_message(&mut client, &msg).await?;
+        send_message(&mut client, &msg).await?;
         msg.link.clone()
     };
 
     // Simulate waiting for Actor access
     println!("Waiting 65s for Author send the keyload message....");
-    // tokio::time::delay_for(Duration::from_secs(65)).await;
+    tokio::time::delay_for(Duration::from_secs(65)).await;
 
     let msg_list = recv_messages(&mut client, &subscribe_link).await?;
     println!("\nReceive {} Messages", msg_list.len());
