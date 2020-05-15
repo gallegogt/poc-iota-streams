@@ -165,7 +165,7 @@ impl Default for SendTrytesOptions {
 }
 
 #[async_trait]
-impl<'a, TW, F> AsyncTransport<TW, F, TangleAddress<TW>> for iota::Client<'a>
+impl<TW, F> AsyncTransport<TW, F, TangleAddress<TW>> for iota::Client
 where
     TW: StringTbitWord + Send + Sync + 'static,
     F: Send + Sync + 'static,

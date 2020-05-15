@@ -16,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
     let args: Vec<_> = env::args().collect::<Vec<_>>();
 
     // tangle client
-    let mut client = iota::Client::new("https://nodes.comnet.thetangle.org");
+    let mut client = iota::Client::new("https://nodes.comnet.thetangle.org").unwrap();
     let mut subscriber = Subscriber::new(
         "CWRRJXOOOHTEE9LQ99MEMGMYIDHYJEIWODFUJTXH9UNRRHHOZOOFUBZVXPWTXPLGSIQNSDZRQFEZEAXZD",
         true,

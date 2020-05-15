@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // tangle client
-    let mut api = Client::new("https://nodes.comnet.thetangle.org:443");
+    let mut api = Client::new("https://nodes.comnet.thetangle.org:443").unwrap();
     // Create the author
     let mut author = Author::new(&args[1], 3, true);
 
@@ -142,7 +142,7 @@ where
 /// Accept all Subscribers
 ///
 async fn accept_subscribers<'a>(
-    client: &mut Client<'a>,
+    client: &mut Client,
     author: &mut Author,
     channel_link: &Address,
 ) -> anyhow::Result<()> {
