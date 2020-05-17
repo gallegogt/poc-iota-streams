@@ -68,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
         if preparsed.check_content_type(message::signed_packet::TYPE) {
             match subscriber.unwrap_signed_packet(preparsed.clone()) {
                 Ok((unwrapped_public, unwrapped_masked)) => {
-                    print_sended_data("Signed", unwrapped_public, unwrapped_masked);
+                    print_received_data("Signed", unwrapped_public, unwrapped_masked);
                 }
                 Err(e) => println!("Signed Packet Error: {}", e),
             }
@@ -79,7 +79,7 @@ async fn main() -> anyhow::Result<()> {
             let rs = subscriber.unwrap_tagged_packet(preparsed.clone());
             match rs {
                 Ok((unwrapped_public, unwrapped_masked)) => {
-                    print_sended_data("Tagged", unwrapped_public, unwrapped_masked);
+                    print_received_data("Tagged", unwrapped_public, unwrapped_masked);
                 }
                 Err(e) => println!("Tagged Packet Error: {}", e),
             }
@@ -101,20 +101,20 @@ async fn main() -> anyhow::Result<()> {
 ///
 /// Print Sended Data
 ///
-fn print_sended_data<T>(prefix: T, public: Trytes<DefaultTW>, masked: Trytes<DefaultTW>)
+fn print_received_data<T>(prefix: T, public: Trytes<DefaultTW>, masked: Trytes<DefaultTW>)
 where
     T: Into<String>,
 {
-    let p_data: anyhow::Result<StreamsData> = Payload::unwrap_data(&public);
-    let m_data: anyhow::Result<StreamsData> = Payload::unwrap_data(&masked);
+    let p_data: Option<StreamsData> = Payload::unwrap_data(&public).unwrap();
+    let m_data: Option<StreamsData> = Payload::unwrap_data(&masked).unwrap();
     let pfx = prefix.into();
 
     match p_data {
-        Ok(d) => println!("\n {} Public Packet: \n \t\t{:?}\n", pfx, d),
-        Err(k) => eprintln!("{:#?}", k),
+        Some(d) => println!("\n {} Public Packet: \n \t{:?}\n", pfx, d),
+        None => {}
     }
     match m_data {
-        Ok(d) => println!("\n {} Masked Packet: \n \t\t{:?}\n", pfx, d),
-        Err(k) => eprintln!("{:#?}", k),
+        Some(d) => println!("\n {} Masked Packet: \n \t{:?}\n", pfx, d),
+        None => {}
     }
 }
