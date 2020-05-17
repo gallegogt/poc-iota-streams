@@ -185,15 +185,21 @@ where
         let mut trytes: Vec<Transaction> = bundle.into_iter().map(|x| x).collect();
         trytes.reverse();
 
-        let txs = self
+        let result = self
             .send_trytes()
             .min_weight_magnitude(opt.min_weight_magnitude)
             .depth(opt.depth)
             .trytes(trytes)
             .send()
-            .await
-            .unwrap();
-        Ok(txs)
+            .await;
+
+        match result {
+            Ok(txs) => Ok(txs),
+            Err(e) => {
+                eprintln!("Err: {:#?}", e);
+                Err(e)
+            }
+        }
     }
 
     /// Receive a message.
@@ -231,7 +237,12 @@ where
             .await
             .unwrap();
         let txs = bundles_from_transactions(&txs_resp.trytes);
-        Ok(txs.iter().map(|bundle| bundle_to_message(bundle)).collect())
+        Ok(txs
+            .iter()
+            .rev()
+            .map(|bundle| bundle_to_message(bundle))
+            .filter(|message| message.link.appinst == link.appinst)
+            .collect())
     }
 
     /// Receive a message.
@@ -262,8 +273,11 @@ where
             .await
             .unwrap();
         let txs = bundles_from_transactions(&txs_resp.trytes);
-        let mut msgs: Vec<TbinaryMessage<TW, F, TangleAddress<TW>>> =
-            txs.iter().map(|bundle| bundle_to_message(bundle)).collect();
+        let mut msgs: Vec<TbinaryMessage<TW, F, TangleAddress<TW>>> = txs
+            .iter()
+            .rev()
+            .map(|bundle| bundle_to_message(bundle))
+            .collect();
         Ok(msgs.pop())
     }
 }
@@ -277,6 +291,7 @@ fn bundles_from_transactions(hashes: &Vec<Transaction>) -> Vec<Vec<Transaction>>
             .to_inner()
             .as_i8_slice()
             .cmp(&y.address().to_inner().as_i8_slice())
+            .then(x.timestamp().to_inner().cmp(y.timestamp().to_inner()))
             .then(
                 x.tag()
                     .to_inner()

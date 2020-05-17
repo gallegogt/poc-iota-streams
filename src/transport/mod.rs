@@ -21,9 +21,10 @@ where
     T: AsyncTransport,
     <T>::RecvOptions: Copy + Default + Send,
 {
-    transport
+    let messages = transport
         .recv_messages_with_options(addr, T::RecvOptions::default())
-        .await
+        .await?;
+    Ok(messages)
 }
 
 ///
@@ -45,6 +46,8 @@ where
     T: AsyncTransport + Send,
     <T>::SendOptions: Copy + Default + Send,
 {
-    transport.send_message(message).await?;
-    Ok(())
+    match transport.send_message(message).await {
+        Ok(_) => Ok(()),
+        Err(e) => Err(e),
+    }
 }

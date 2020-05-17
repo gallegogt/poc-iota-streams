@@ -30,16 +30,20 @@ pub struct Payload(Trytes<DefaultTW>, Trytes<DefaultTW>);
 
 impl Payload {
     ///
-    /// Unwrap Data
+    /// Unwrap JSON Data
     ///
-    pub fn unwrap_data<T>(data: &Trytes<DefaultTW>) -> anyhow::Result<T>
+    pub fn unwrap_data<T>(data: &Trytes<DefaultTW>) -> anyhow::Result<Option<T>>
     where
         T: DeserializeOwned,
     {
+        let data_str = data.to_string();
+        if data_str.len() == 0 {
+            return Ok(None);
+        }
         let raw = trytes_to_string(&data.to_string())
             .map_err(|_| anyhow::anyhow!("Error on convert payload from trytes"))?;
         let decode_data = decode_config(&raw, URL_SAFE_NO_PAD)?;
-        Ok(serde_json::from_slice(&decode_data)?)
+        Ok(Some(serde_json::from_slice(&decode_data)?))
     }
 }
 
