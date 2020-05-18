@@ -21,19 +21,21 @@ path = "src/bin/subscriber.rs"
 
 [dependencies]
 iota-streams = { git = "https://github.com/iotaledger/streams.git" }
-# iota-streams = { path = "../streams" }
-# failure = "0.1.7"
 anyhow = "1.0"
+# iota-core = { path = "../iota.rs/iota-core" }
 iota-core = { git = "https://github.com/iotaledger/iota.rs.git" }
 iota-conversion = { git = "https://github.com/iotaledger/iota.rs.git" }
 tokio = { version = "^0.2", features = ["full"] }
 async-trait = "0.1.30"
 chrono = { version = "^0.4", features = ["serde"]}
-#clap = "^2.33"
 serde = { version = "^1.0", features=["derive"] }
 serde_json = "^1.0"
 base64 = "^0.12"
 rand = "^0.7"
+
+[dev-dependencies]
+clap = "^2.33"
+# piper = "0.1.1"
 
 [profile.release]
 lto = true
