@@ -7,7 +7,7 @@ use iota_streams::{
 };
 use poc::{
     sample::StreamsData,
-    transport::{payload::Payload, recv_message, recv_messages, send_message},
+    transport::{payload::Payload, recv_message, recv_messages, send_message, IotaTransport},
 };
 use std::{env, time::Duration};
 
@@ -16,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
     let args: Vec<_> = env::args().collect::<Vec<_>>();
 
     // tangle client
-    let mut client = iota::Client::new("https://nodes.comnet.thetangle.org").unwrap();
+    let mut client = IotaTransport::add_node("https://nodes.comnet.thetangle.org:443").unwrap();
     let mut subscriber = Subscriber::new(
         "CWRRJXOOOHTEE9LQ99MEMGMYIDHYJEIWODFUJTXH9UNRRHHOZOOFUBZVXPWTXPLGSIQNSDZRQFEZEAXZD",
         true,

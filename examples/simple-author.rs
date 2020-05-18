@@ -10,13 +10,12 @@
 //! ```
 //!
 use clap::{App, Arg};
-use iota::Client;
 use iota_streams::app_channels::api::tangle::{Address, Author};
 use poc::{
     sample::StreamsData,
     transport::{
         payload::{PacketPayload, PayloadBuilder},
-        send_message, AsyncTransport,
+        send_message, AsyncTransport, IotaTransport,
     },
 };
 use std::time::Duration;
@@ -60,7 +59,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize The IOTA Client
     //
-    let mut api = Client::new(api_url).unwrap();
+    let mut client = IotaTransport::add_node(api_url).unwrap();
 
     // Create the author
     //
@@ -79,7 +78,7 @@ async fn main() -> anyhow::Result<()> {
         println!("Announcement Message Tag:");
         println!("\t{}\n", msg.link.msgid);
 
-        send_message(&mut api, msg).await.unwrap();
+        send_message(&mut client, msg).await.unwrap();
 
         (msg.link.appinst.to_string(), msg.link.msgid.to_string())
     };
@@ -100,7 +99,7 @@ async fn main() -> anyhow::Result<()> {
         }
 
         let _link_signed = send_signed_data(
-            &mut api,
+            &mut client,
             &mut author,
             &announcement_link,
             PayloadBuilder::new()

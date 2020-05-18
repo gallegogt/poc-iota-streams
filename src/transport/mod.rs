@@ -6,6 +6,7 @@ pub mod payload;
 mod tangle;
 
 use iota_streams::app_channels::api::tangle::{Address, DefaultF, DefaultTW, Message};
+pub use tangle::IotaTransport;
 
 ///
 /// AsyncTransport

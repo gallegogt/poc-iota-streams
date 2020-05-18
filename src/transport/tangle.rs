@@ -26,6 +26,232 @@ use iota_streams::{
 
 use crate::transport::base::*;
 
+///
+/// Iota Client Wrapper
+///
+pub struct IotaTransport;
+
+impl IotaTransport {
+    ///
+    /// Add new IOTA Node
+    ///
+    pub fn add_node<T>(node_url: T) -> anyhow::Result<Self>
+    where
+        T: Into<String>,
+    {
+        iota::Client::add_node(&node_url.into())?;
+        Ok(Self)
+    }
+}
+
+/// Stripped version of `iota::options::SendTrytesOptions<'a>` due to lifetime parameter.
+#[derive(Clone, Copy)]
+pub struct SendTrytesOptions {
+    pub depth: u8,
+    pub min_weight_magnitude: u8,
+    pub local_pow: bool,
+}
+
+impl Default for SendTrytesOptions {
+    fn default() -> Self {
+        Self {
+            depth: 3,
+            min_weight_magnitude: 10,
+            local_pow: true,
+        }
+    }
+}
+
+#[async_trait]
+impl<TW, F> AsyncTransport<TW, F, TangleAddress<TW>> for IotaTransport
+where
+    TW: StringTbitWord + Send + Sync + 'static,
+    F: Send + Sync + 'static,
+{
+    type SendOptions = SendTrytesOptions;
+    type SendOutput = Vec<Transaction>;
+    type RecvOptions = ();
+
+    /// Send a Streams message over the Tangle with the current timestamp and default SendTrytesOptions.
+    async fn send_message_with_options(
+        &mut self,
+        msg: &TbinaryMessage<TW, F, TangleAddress<TW>>,
+        opt: Self::SendOptions,
+    ) -> anyhow::Result<Self::SendOutput> {
+        let timestamp = Utc::now().timestamp();
+        let bundle = msg_to_bundle(&msg, timestamp);
+        let mut trytes: Vec<Transaction> = bundle.into_iter().map(|x| x).collect();
+        trytes.reverse();
+
+        let result = iota::Client::send_trytes()
+            .min_weight_magnitude(opt.min_weight_magnitude)
+            .depth(opt.depth)
+            .trytes(trytes)
+            .send()
+            .await;
+
+        match result {
+            Ok(txs) => Ok(txs),
+            Err(e) => {
+                eprintln!("Err: {:#?}", e);
+                Err(e)
+            }
+        }
+    }
+
+    /// Receive a message.
+    /// Receive messages with explicit options.
+    async fn recv_messages_with_options(
+        &mut self,
+        link: &TangleAddress<TW>,
+        _opt: Self::RecvOptions,
+    ) -> anyhow::Result<Vec<TbinaryMessage<TW, F, TangleAddress<TW>>>> {
+        let addr_str = link.appinst.to_string();
+        let _tag_str = link.msgid.to_string();
+
+        let hashes_resp = iota::Client::find_transactions()
+            .addresses(&vec![Address::from_inner_unchecked(
+                TryteBuf::try_from_str(&addr_str)
+                    .unwrap()
+                    .as_trits()
+                    .encode(),
+            )])
+            // .tags(&vec![Tag::from_inner_unchecked(
+            //     TryteBuf::try_from_str(&tag_str)
+            //         .unwrap()
+            //         .as_trits()
+            //         .encode(),
+            // )])
+            .send()
+            .await
+            .unwrap();
+
+        let txs_resp = iota::Client::get_trytes(&hashes_resp.hashes).await.unwrap();
+        let txs = bundles_from_transactions(&txs_resp.trytes);
+        Ok(txs
+            .iter()
+            .rev()
+            .map(|bundle| bundle_to_message(bundle))
+            .filter(|message| message.link.appinst == link.appinst)
+            .collect())
+    }
+
+    /// Receive a message.
+    /// Receive messages with explicit options.
+    async fn recv_message_with_options(
+        &mut self,
+        link: &TangleAddress<TW>,
+        _opt: Self::RecvOptions,
+    ) -> anyhow::Result<Option<TbinaryMessage<TW, F, TangleAddress<TW>>>> {
+        let tag_str = link.msgid.to_string();
+
+        let hashes_resp = iota::Client::find_transactions()
+            .tags(&vec![Tag::from_inner_unchecked(
+                TryteBuf::try_from_str(&tag_str)
+                    .unwrap()
+                    .as_trits()
+                    .encode(),
+            )])
+            .send()
+            .await
+            .unwrap();
+
+        let txs_resp = iota::Client::get_trytes(&hashes_resp.hashes).await.unwrap();
+        let txs = bundles_from_transactions(&txs_resp.trytes);
+        let mut msgs: Vec<TbinaryMessage<TW, F, TangleAddress<TW>>> = txs
+            .iter()
+            .rev()
+            .map(|bundle| bundle_to_message(bundle))
+            .collect();
+        Ok(msgs.pop())
+    }
+}
+
+fn bundles_from_transactions(hashes: &Vec<Transaction>) -> Vec<Vec<Transaction>> {
+    let mut txs = hashes.clone();
+    let mut bundles = Vec::new();
+
+    txs.sort_by(|x, y| {
+        x.address()
+            .to_inner()
+            .as_i8_slice()
+            .cmp(&y.address().to_inner().as_i8_slice())
+            .then(x.timestamp().to_inner().cmp(y.timestamp().to_inner()))
+            .then(
+                x.tag()
+                    .to_inner()
+                    .as_i8_slice()
+                    .cmp(&y.tag().to_inner().as_i8_slice()),
+            )
+            // different messages may have the same bundle hash!
+            .then(
+                x.bundle()
+                    .to_inner()
+                    .as_i8_slice()
+                    .cmp(&y.bundle().to_inner().as_i8_slice()),
+            )
+            // reverse order of txs will be extracted from back with `pop`
+            .then(x.index().to_inner().cmp(&y.index().to_inner()).reverse())
+    });
+
+    if let Some(tx) = txs.pop() {
+        let mut bundle = vec![tx];
+        loop {
+            if let Some(tx) = txs.pop() {
+                if bundle[0].address() == tx.address()
+                    && bundle[0].tag() == tx.tag()
+                    && bundle[0].bundle() == tx.bundle()
+                {
+                    bundle.push(tx);
+                } else {
+                    bundles.push(bundle);
+                    bundle = vec![tx];
+                }
+            } else {
+                bundles.push(bundle);
+                break;
+            }
+        }
+    }
+
+    // TODO: Check the bundles
+    bundles
+    // .into_iter()
+    // .filter_map(|txs| {
+    //     let mut bundle = IncomingBundleBuilder::new();
+    //     txs.into_iter().for_each(|t| bundle.push(t));
+
+    //     match bundle.validate() {
+    //         Ok(builder) => Some(builder.build()),
+    //         Err(err) => {
+    //             println!("Err: {:?}", err);
+    //             None
+    //         }
+    //     }
+    // })
+    // .collect()
+}
+
+fn bundle_to_message<TW, F>(bundle: &Vec<Transaction>) -> TbinaryMessage<TW, F, TangleAddress<TW>>
+where
+    TW: StringTbitWord,
+{
+    let tx = &bundle[0];
+    let addr: String = tx.address().to_inner().as_i8_slice().trytes().unwrap();
+    let tag: String = tx.tag().to_inner().as_i8_slice().trytes().unwrap();
+
+    let appinst = AppInst::from_str(&addr).unwrap();
+    let msgid = MsgId::from_str(&tag).unwrap();
+
+    let mut body = Tbits::<TW>::zero(0);
+
+    for tx in bundle.into_iter() {
+        body += &Tbits::<TW>::from_str(&tx.payload().to_inner().as_i8_slice().trytes().unwrap())
+            .unwrap();
+    }
+    TbinaryMessage::new(TangleAddress::<TW> { appinst, msgid }, body)
+}
+
 fn make_empty_tx() -> TransactionBuilder {
     TransactionBuilder::new()
         .with_value(Value::from_inner_unchecked(0))
@@ -144,225 +370,4 @@ where
         .unwrap()
         .build()
         .unwrap()
-}
-
-/// Stripped version of `iota::options::SendTrytesOptions<'a>` due to lifetime parameter.
-#[derive(Clone, Copy)]
-pub struct SendTrytesOptions {
-    pub depth: u8,
-    pub min_weight_magnitude: u8,
-    pub local_pow: bool,
-}
-
-impl Default for SendTrytesOptions {
-    fn default() -> Self {
-        Self {
-            depth: 3,
-            min_weight_magnitude: 10,
-            local_pow: true,
-        }
-    }
-}
-
-#[async_trait]
-impl<TW, F> AsyncTransport<TW, F, TangleAddress<TW>> for iota::Client
-where
-    TW: StringTbitWord + Send + Sync + 'static,
-    F: Send + Sync + 'static,
-{
-    type SendOptions = SendTrytesOptions;
-    type SendOutput = Vec<Transaction>;
-    type RecvOptions = ();
-
-    /// Send a Streams message over the Tangle with the current timestamp and default SendTrytesOptions.
-    async fn send_message_with_options(
-        &mut self,
-        msg: &TbinaryMessage<TW, F, TangleAddress<TW>>,
-        opt: Self::SendOptions,
-    ) -> anyhow::Result<Self::SendOutput> {
-        let timestamp = Utc::now().timestamp();
-        let bundle = msg_to_bundle(&msg, timestamp);
-        let mut trytes: Vec<Transaction> = bundle.into_iter().map(|x| x).collect();
-        trytes.reverse();
-
-        let result = self
-            .send_trytes()
-            .min_weight_magnitude(opt.min_weight_magnitude)
-            .depth(opt.depth)
-            .trytes(trytes)
-            .send()
-            .await;
-
-        match result {
-            Ok(txs) => Ok(txs),
-            Err(e) => {
-                eprintln!("Err: {:#?}", e);
-                Err(e)
-            }
-        }
-    }
-
-    /// Receive a message.
-    /// Receive messages with explicit options.
-    async fn recv_messages_with_options(
-        &mut self,
-        link: &TangleAddress<TW>,
-        _opt: Self::RecvOptions,
-    ) -> anyhow::Result<Vec<TbinaryMessage<TW, F, TangleAddress<TW>>>> {
-        let addr_str = link.appinst.to_string();
-        let _tag_str = link.msgid.to_string();
-
-        let hashes_resp = self
-            .find_transactions()
-            .addresses(&vec![Address::from_inner_unchecked(
-                TryteBuf::try_from_str(&addr_str)
-                    .unwrap()
-                    .as_trits()
-                    .encode(),
-            )])
-            // .tags(&vec![Tag::from_inner_unchecked(
-            //     TryteBuf::try_from_str(&tag_str)
-            //         .unwrap()
-            //         .as_trits()
-            //         .encode(),
-            // )])
-            .send()
-            .await
-            .unwrap();
-
-        let txs_resp = self
-            .get_trytes()
-            .hashes(&hashes_resp.hashes)
-            .send()
-            .await
-            .unwrap();
-        let txs = bundles_from_transactions(&txs_resp.trytes);
-        Ok(txs
-            .iter()
-            .rev()
-            .map(|bundle| bundle_to_message(bundle))
-            .filter(|message| message.link.appinst == link.appinst)
-            .collect())
-    }
-
-    /// Receive a message.
-    /// Receive messages with explicit options.
-    async fn recv_message_with_options(
-        &mut self,
-        link: &TangleAddress<TW>,
-        _opt: Self::RecvOptions,
-    ) -> anyhow::Result<Option<TbinaryMessage<TW, F, TangleAddress<TW>>>> {
-        let tag_str = link.msgid.to_string();
-
-        let hashes_resp = self
-            .find_transactions()
-            .tags(&vec![Tag::from_inner_unchecked(
-                TryteBuf::try_from_str(&tag_str)
-                    .unwrap()
-                    .as_trits()
-                    .encode(),
-            )])
-            .send()
-            .await
-            .unwrap();
-
-        let txs_resp = self
-            .get_trytes()
-            .hashes(&hashes_resp.hashes)
-            .send()
-            .await
-            .unwrap();
-        let txs = bundles_from_transactions(&txs_resp.trytes);
-        let mut msgs: Vec<TbinaryMessage<TW, F, TangleAddress<TW>>> = txs
-            .iter()
-            .rev()
-            .map(|bundle| bundle_to_message(bundle))
-            .collect();
-        Ok(msgs.pop())
-    }
-}
-
-fn bundles_from_transactions(hashes: &Vec<Transaction>) -> Vec<Vec<Transaction>> {
-    let mut txs = hashes.clone();
-    let mut bundles = Vec::new();
-
-    txs.sort_by(|x, y| {
-        x.address()
-            .to_inner()
-            .as_i8_slice()
-            .cmp(&y.address().to_inner().as_i8_slice())
-            .then(x.timestamp().to_inner().cmp(y.timestamp().to_inner()))
-            .then(
-                x.tag()
-                    .to_inner()
-                    .as_i8_slice()
-                    .cmp(&y.tag().to_inner().as_i8_slice()),
-            )
-            // different messages may have the same bundle hash!
-            .then(
-                x.bundle()
-                    .to_inner()
-                    .as_i8_slice()
-                    .cmp(&y.bundle().to_inner().as_i8_slice()),
-            )
-            // reverse order of txs will be extracted from back with `pop`
-            .then(x.index().to_inner().cmp(&y.index().to_inner()).reverse())
-    });
-
-    if let Some(tx) = txs.pop() {
-        let mut bundle = vec![tx];
-        loop {
-            if let Some(tx) = txs.pop() {
-                if bundle[0].address() == tx.address()
-                    && bundle[0].tag() == tx.tag()
-                    && bundle[0].bundle() == tx.bundle()
-                {
-                    bundle.push(tx);
-                } else {
-                    bundles.push(bundle);
-                    bundle = vec![tx];
-                }
-            } else {
-                bundles.push(bundle);
-                break;
-            }
-        }
-    }
-
-    // TODO: Check the bundles
-    bundles
-    // .into_iter()
-    // .filter_map(|txs| {
-    //     let mut bundle = IncomingBundleBuilder::new();
-    //     txs.into_iter().for_each(|t| bundle.push(t));
-
-    //     match bundle.validate() {
-    //         Ok(builder) => Some(builder.build()),
-    //         Err(err) => {
-    //             println!("Err: {:?}", err);
-    //             None
-    //         }
-    //     }
-    // })
-    // .collect()
-}
-
-fn bundle_to_message<TW, F>(bundle: &Vec<Transaction>) -> TbinaryMessage<TW, F, TangleAddress<TW>>
-where
-    TW: StringTbitWord,
-{
-    let tx = &bundle[0];
-    let addr: String = tx.address().to_inner().as_i8_slice().trytes().unwrap();
-    let tag: String = tx.tag().to_inner().as_i8_slice().trytes().unwrap();
-
-    let appinst = AppInst::from_str(&addr).unwrap();
-    let msgid = MsgId::from_str(&tag).unwrap();
-
-    let mut body = Tbits::<TW>::zero(0);
-
-    for tx in bundle.into_iter() {
-        body += &Tbits::<TW>::from_str(&tx.payload().to_inner().as_i8_slice().trytes().unwrap())
-            .unwrap();
-    }
-    TbinaryMessage::new(TangleAddress::<TW> { appinst, msgid }, body)
 }

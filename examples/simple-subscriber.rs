@@ -15,7 +15,7 @@ use iota_streams::app_channels::{
 use clap::{App, Arg};
 use poc::{
     sample::print_message_payload,
-    transport::{recv_message, recv_messages},
+    transport::{recv_message, recv_messages, IotaTransport},
 };
 
 #[tokio::main]
@@ -63,7 +63,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize the IOTA Client
     //
-    let mut client = iota::Client::new(api_url).unwrap();
+    let mut client = IotaTransport::add_node(api_url).unwrap();
 
     // Create subscriber
     //

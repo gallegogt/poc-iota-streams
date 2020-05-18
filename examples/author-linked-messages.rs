@@ -8,13 +8,12 @@
 //! ```
 //!
 use clap::{App, Arg};
-use iota::Client;
 use iota_streams::app_channels::api::tangle::{Address, Author};
 use poc::{
     sample::StreamsData,
     transport::{
         payload::{PacketPayload, PayloadBuilder},
-        send_message, AsyncTransport,
+        send_message, AsyncTransport, IotaTransport,
     },
 };
 use std::time::Duration;
@@ -58,7 +57,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize The IOTA Client
     //
-    let mut api = Client::new(api_url).unwrap();
+    let mut client = IotaTransport::add_node(api_url).unwrap();
 
     // Create the author
     //
@@ -77,7 +76,7 @@ async fn main() -> anyhow::Result<()> {
         println!("Announcement Message Tag:");
         println!("\t{}\n", msg.link.msgid);
 
-        send_message(&mut api, msg).await.unwrap();
+        send_message(&mut client, msg).await.unwrap();
 
         msg.link.clone()
     };
@@ -90,7 +89,7 @@ async fn main() -> anyhow::Result<()> {
         "Share Keyload For Everyone Message Tag={} ..",
         shk_message.link.msgid
     );
-    send_message(&mut api, &shk_message).await.unwrap();
+    send_message(&mut client, &shk_message).await.unwrap();
     print!("[OK]\n\r");
 
     // Posible numbers of messages to sign before change the key
@@ -106,7 +105,7 @@ async fn main() -> anyhow::Result<()> {
 
             // send change key message
             //
-            send_message(&mut api, &chk_message).await.unwrap();
+            send_message(&mut client, &chk_message).await.unwrap();
             link_addr = chk_message.link.clone();
             remaining_signed_messages = remaining_sk;
 
@@ -119,7 +118,7 @@ async fn main() -> anyhow::Result<()> {
         }
 
         link_addr = send_signed_data(
-            &mut api,
+            &mut client,
             &mut author,
             &link_addr,
             PayloadBuilder::new()

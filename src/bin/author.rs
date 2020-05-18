@@ -1,4 +1,3 @@
-use iota::Client;
 use iota_streams::app_channels::{
     api::tangle::{Address, Author},
     message,
@@ -7,7 +6,7 @@ use poc::{
     sample::StreamsData,
     transport::{
         payload::{PacketPayload, PayloadBuilder},
-        recv_messages, send_message, AsyncTransport,
+        recv_messages, send_message, AsyncTransport, IotaTransport,
     },
 };
 use std::{env, process::exit, time::Duration};
@@ -21,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // tangle client
-    let mut api = Client::new("https://nodes.comnet.thetangle.org:443").unwrap();
+    let mut client = IotaTransport::add_node("https://nodes.comnet.thetangle.org:443").unwrap();
     // Create the author
     let mut author = Author::new(&args[1], 3, true);
 
@@ -39,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
             msg.link.msgid
         );
 
-        send_message(&mut api, msg).await.unwrap();
+        send_message(&mut client, msg).await.unwrap();
 
         (msg.link.appinst.to_string(), msg.link.msgid.to_string())
     };
@@ -55,7 +54,7 @@ async fn main() -> anyhow::Result<()> {
     // =======================================
 
     println!("Accept subscribers....");
-    accept_subscribers(&mut api, &mut author, &announcement_link).await?;
+    accept_subscribers(&mut client, &mut author, &announcement_link).await?;
 
     println!("Share keyload for everyone:");
     let keyload_link = {
@@ -63,12 +62,12 @@ async fn main() -> anyhow::Result<()> {
             .share_keyload_for_everyone(&announcement_link)
             .map_err(|_| anyhow::anyhow!("Error preparing the keload for everyone"))?;
         println!("\t\tShare KeyLoad Message Tag={}", msg.link.msgid);
-        send_message(&mut api, &msg).await.unwrap();
+        send_message(&mut client, &msg).await.unwrap();
         msg.link
     };
 
     let _link_signed = send_signed_data(
-        &mut api,
+        &mut client,
         &mut author,
         &announcement_link,
         PayloadBuilder::new()
@@ -80,7 +79,7 @@ async fn main() -> anyhow::Result<()> {
     .unwrap();
 
     let _link = send_tagged_data(
-        &mut api,
+        &mut client,
         &mut author,
         &keyload_link,
         PayloadBuilder::new()
@@ -141,11 +140,15 @@ where
 ///
 /// Accept all Subscribers
 ///
-async fn accept_subscribers<'a>(
-    client: &mut Client,
+async fn accept_subscribers<'a, T>(
+    client: &mut T,
     author: &mut Author,
     channel_link: &Address,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+where
+    T: AsyncTransport,
+    <T>::RecvOptions: Copy + Default + Send,
+{
     let msg_list = recv_messages(client, channel_link).await?;
     msg_list
         .iter()
