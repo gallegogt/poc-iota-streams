@@ -3,11 +3,9 @@ use iota_streams::app_channels::{
     message,
 };
 use poc::{
+    payload::{json::PayloadBuilder, PacketPayload},
     sample::StreamsData,
-    transport::{
-        payload::{PacketPayload, PayloadBuilder},
-        recv_messages, send_message, AsyncTransport, IotaTransport,
-    },
+    transport::{recv_messages, send_message, AsyncTransport, IotaTransport},
 };
 use std::{env, process::exit, time::Duration};
 
@@ -71,8 +69,8 @@ async fn main() -> anyhow::Result<()> {
         &mut author,
         &announcement_link,
         PayloadBuilder::new()
-            .public(&StreamsData::default())
-            .masked(&StreamsData::default())
+            .public(&StreamsData::default())?
+            .masked(&StreamsData::default())?
             .build(),
     )
     .await
@@ -83,8 +81,8 @@ async fn main() -> anyhow::Result<()> {
         &mut author,
         &keyload_link,
         PayloadBuilder::new()
-            .public(&StreamsData::default())
-            .masked(&StreamsData::default())
+            .public(&StreamsData::default())?
+            .masked(&StreamsData::default())?
             .build(),
     )
     .await

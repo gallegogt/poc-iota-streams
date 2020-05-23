@@ -1,10 +1,11 @@
 //!
 //! PoC Lib
 //!
+pub mod payload;
 pub mod transport;
 
 pub mod sample {
-    use crate::transport::payload::Payload;
+    use crate::payload::json::Payload;
     use chrono::{Local, NaiveDateTime};
     use iota_streams::{app_channels::api::tangle::DefaultTW, protobuf3::types::Trytes};
     use rand::Rng;

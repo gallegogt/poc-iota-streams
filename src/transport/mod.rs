@@ -2,7 +2,6 @@
 //! Transport Module
 //!
 mod base;
-pub mod payload;
 mod tangle;
 
 use iota_streams::app_channels::api::tangle::{Address, DefaultF, DefaultTW, Message};

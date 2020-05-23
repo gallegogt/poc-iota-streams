@@ -107,7 +107,7 @@ where
         _opt: Self::RecvOptions,
     ) -> anyhow::Result<Vec<TbinaryMessage<TW, F, TangleAddress<TW>>>> {
         let addr_str = link.appinst.to_string();
-        let _tag_str = link.msgid.to_string();
+        //        let tag_str = link.msgid.to_string();
 
         let hashes_resp = iota::Client::find_transactions()
             .addresses(&vec![Address::from_inner_unchecked(
@@ -116,18 +116,24 @@ where
                     .as_trits()
                     .encode(),
             )])
-            // .tags(&vec![Tag::from_inner_unchecked(
-            //     TryteBuf::try_from_str(&tag_str)
-            //         .unwrap()
-            //         .as_trits()
-            //         .encode(),
-            // )])
+            //            .tags(&vec![Tag::from_inner_unchecked(
+            //                TryteBuf::try_from_str(&tag_str)
+            //                    .unwrap()
+            //                    .as_trits()
+            //                    .encode(),
+            //            )])
             .send()
             .await
             .unwrap();
 
-        let txs_resp = iota::Client::get_trytes(&hashes_resp.hashes).await.unwrap();
-        let txs = bundles_from_transactions(&txs_resp.trytes);
+        let mut txs_x = Vec::new();
+        for chunk in hashes_resp.hashes.chunks(100) {
+            let txs_resp = iota::Client::get_trytes(&chunk).await.unwrap();
+            txs_x.push(txs_resp.trytes);
+        }
+
+        let txs = bundles_from_transactions(&txs_x.concat());
+
         Ok(txs
             .iter()
             .rev()
@@ -144,8 +150,15 @@ where
         _opt: Self::RecvOptions,
     ) -> anyhow::Result<Option<TbinaryMessage<TW, F, TangleAddress<TW>>>> {
         let tag_str = link.msgid.to_string();
+        // let addr_str = link.appinst.to_string();
 
         let hashes_resp = iota::Client::find_transactions()
+            //.addresses(&vec![Address::from_inner_unchecked(
+            //    TryteBuf::try_from_str(&addr_str)
+            //        .unwrap()
+            //        .as_trits()
+            //        .encode(),
+            //)])
             .tags(&vec![Tag::from_inner_unchecked(
                 TryteBuf::try_from_str(&tag_str)
                     .unwrap()

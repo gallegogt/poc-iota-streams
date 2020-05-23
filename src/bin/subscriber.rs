@@ -6,8 +6,9 @@ use iota_streams::{
     protobuf3::types::Trytes,
 };
 use poc::{
+    payload::json::Payload,
     sample::StreamsData,
-    transport::{payload::Payload, recv_message, recv_messages, send_message, IotaTransport},
+    transport::{recv_message, recv_messages, send_message, IotaTransport},
 };
 use std::{env, time::Duration};
 
