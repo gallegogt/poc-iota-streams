@@ -10,13 +10,13 @@ path = "src/lib.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[[bin]] # Bin to run the HelloWorld gRPC server
-name = "author"
-path = "src/bin/author.rs"
-
-[[bin]] # Bin to run the HelloWorld gRPC client
-name = "subscriber"
-path = "src/bin/subscriber.rs"
+# [[bin]]
+# name = "author"
+# path = "src/bin/author.rs"
+#
+# [[bin]]
+# name = "subscriber"
+# path = "src/bin/subscriber.rs"
 
 
 [dependencies]
