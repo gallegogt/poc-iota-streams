@@ -1,10 +1,12 @@
 //!
-//! Author Of Linked Messages
+//! Simple IOTA Streams Author
+//!
+//! * This example sends all linked signed messages to the announce
 //!
 //! How run this example:
 //!
 //! ```bash
-//!   cargo run --example author-linked-messages --release -- --seed <SEED> [--mss_height 3]
+//!   cargo run --example e02-author-with-changekey --release -- --seed <SEED> [--mss-height 3]
 //! ```
 //!
 use clap::{App, Arg};
@@ -18,7 +20,7 @@ use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let matches = App::new("Author Of Linked Messages")
+    let matches = App::new("Simple IOTA Streams Author")
         .version("1.0")
         .arg(
             Arg::with_name("seed")
@@ -32,12 +34,13 @@ async fn main() -> anyhow::Result<()> {
                 .short("p")
                 .long("url")
                 .takes_value(true)
+                .default_value("https://nodes.comnet.thetangle.org:443")
                 .help("The Tangle Url, Default: https://nodes.comnet.thetangle.org:443"),
         )
         .arg(
             Arg::with_name("mss_height")
                 .short("m")
-                .long("mss_height")
+                .long("mss-height")
                 .takes_value(true)
                 .help("Merkle Tree Signature Height, Default: 3"),
         )
@@ -46,6 +49,7 @@ async fn main() -> anyhow::Result<()> {
     let api_url = matches
         .value_of("url")
         .unwrap_or("https://nodes.comnet.thetangle.org:443");
+
     let seed = matches.value_of("seed").unwrap();
     let mss_height: usize = matches
         .value_of("mss_height")
@@ -66,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Creare Announcement Tag
     //
-    let mut link_addr = {
+    let (announcement_address, announcement_tag) = {
         let msg = &author
             .announce()
             .map_err(|_| anyhow::anyhow!("Error creating announce message"))?;
@@ -76,35 +80,26 @@ async fn main() -> anyhow::Result<()> {
 
         send_message(&mut client, msg).await.unwrap();
 
-        msg.link.clone()
+        (msg.link.appinst.to_string(), msg.link.msgid.to_string())
     };
-
-    let shk_message = author
-        .share_keyload_for_everyone(&link_addr)
-        .map_err(|_| anyhow::anyhow!("Error creating share keyload for everyone message"))?;
-
-    print!(
-        "Share Keyload For Everyone Message Tag={} ..",
-        shk_message.link.msgid
-    );
-    send_message(&mut client, &shk_message).await.unwrap();
-    print!("[OK]\n\r");
 
     // Posible numbers of messages to sign before change the key
     //
     let remaining_sk = 2_u32.pow(mss_height as u32);
     let mut remaining_signed_messages = remaining_sk;
 
+    // Announcement Link
+    //
+    let announcement_link = Address::from_str(&announcement_address, &announcement_tag).unwrap();
     loop {
         if remaining_signed_messages <= 0 {
             let chk_message = author
-                .change_key(&link_addr)
+                .change_key(&announcement_link)
                 .map_err(|_| anyhow::anyhow!("Error changing the key"))?;
 
             // send change key message
             //
             send_message(&mut client, &chk_message).await.unwrap();
-            link_addr = chk_message.link.clone();
             remaining_signed_messages = remaining_sk;
 
             println!("Change Key Message Tag:");
@@ -115,10 +110,10 @@ async fn main() -> anyhow::Result<()> {
             remaining_signed_messages = remaining_signed_messages - 1;
         }
 
-        link_addr = send_signed_data(
+        let _link_signed = send_signed_data(
             &mut client,
             &mut author,
-            &link_addr,
+            &announcement_link,
             PayloadBuilder::new()
                 .masked(&StreamsData::default())?
                 .build(),
@@ -136,7 +131,7 @@ async fn main() -> anyhow::Result<()> {
 async fn send_signed_data<'a, T, P>(
     client: &mut T,
     author: &mut Author,
-    link_to: &Address,
+    addrs: &Address,
     payload: P,
 ) -> anyhow::Result<Address>
 where
@@ -146,19 +141,10 @@ where
 {
     let signed_packet_link = {
         let msg = author
-            .sign_packet(&link_to, &payload.public_data(), &payload.masked_data())
+            .sign_packet(&addrs, &payload.public_data(), &payload.masked_data())
             .map_err(|_| anyhow::anyhow!("Error to create signed packet"))?;
-
-        print!("\tSending Signed Message ID={} ...", msg.link.msgid);
-        match send_message(client, &msg).await {
-            Ok(_) => {
-                print!("[OK] \n\r");
-            }
-            Err(e) => {
-                print!("[ERROR] {:#?}\n\r", e);
-            }
-        }
-
+        println!("\tSigned Message ID={}", msg.link.msgid);
+        send_message(client, &msg).await.unwrap();
         msg.link.clone()
     };
     Ok(signed_packet_link)

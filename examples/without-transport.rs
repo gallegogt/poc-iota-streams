@@ -13,8 +13,8 @@ use iota_streams::app_channels::{
     message,
 };
 use poc::{
+    payload::{json::PayloadBuilder, PacketPayload},
     sample::{print_message_payload, StreamsData},
-    transport::payload::{PacketPayload, PayloadBuilder},
 };
 use std::time::Duration;
 
@@ -119,7 +119,7 @@ async fn main() -> anyhow::Result<()> {
             &mut author,
             &link_addr,
             PayloadBuilder::new()
-                .masked(&StreamsData::default())
+                .masked(&StreamsData::default())?
                 .build(),
         )
         .unwrap();

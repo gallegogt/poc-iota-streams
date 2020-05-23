@@ -34,6 +34,7 @@ async fn main() -> anyhow::Result<()> {
                 .short("p")
                 .long("url")
                 .takes_value(true)
+                .default_value("https://nodes.comnet.thetangle.org:443")
                 .help("The Tangle URL, Default: https://nodes.comnet.thetangle.org:443"),
         )
         .arg(

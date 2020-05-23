@@ -1,22 +1,21 @@
 //!
 //! Simple IOTA Streams Author
 //!
-//! In this example only 2 ^ mss_height signed messages will be sent
+//! * This example sends all linked signed messages to the announce and
+//!   only 2 ^ mss_height signed messages will be sent
 //!
 //! How run this example:
 //!
 //! ```bash
-//!   cargo run --example simple-author --release -- --seed <SEED> [--mss_height 3]
+//!   cargo run --example e01-author --release -- --seed <SEED> [--mss-height 3]
 //! ```
 //!
 use clap::{App, Arg};
 use iota_streams::app_channels::api::tangle::{Address, Author};
 use poc::{
+    payload::{json::PayloadBuilder, PacketPayload},
     sample::StreamsData,
-    transport::{
-        payload::{PacketPayload, PayloadBuilder},
-        send_message, AsyncTransport, IotaTransport,
-    },
+    transport::{send_message, AsyncTransport, IotaTransport},
 };
 use std::time::Duration;
 
@@ -36,12 +35,13 @@ async fn main() -> anyhow::Result<()> {
                 .short("p")
                 .long("url")
                 .takes_value(true)
+                .default_value("https://nodes.comnet.thetangle.org:443")
                 .help("The Tangle Url, Default: https://nodes.comnet.thetangle.org:443"),
         )
         .arg(
             Arg::with_name("mss_height")
                 .short("m")
-                .long("mss_height")
+                .long("mss-height")
                 .takes_value(true)
                 .help("Merkle Tree Signature Height, Default: 3"),
         )
@@ -50,6 +50,7 @@ async fn main() -> anyhow::Result<()> {
     let api_url = matches
         .value_of("url")
         .unwrap_or("https://nodes.comnet.thetangle.org:443");
+
     let seed = matches.value_of("seed").unwrap();
     let mss_height: usize = matches
         .value_of("mss_height")
@@ -103,7 +104,7 @@ async fn main() -> anyhow::Result<()> {
             &mut author,
             &announcement_link,
             PayloadBuilder::new()
-                .masked(&StreamsData::default())
+                .masked(&StreamsData::default())?
                 .build(),
         )
         .await
