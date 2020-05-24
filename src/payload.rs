@@ -109,7 +109,6 @@ where
     where
         T: Serialize,
     {
-        // let json_payload = serde_json::to_string(data).unwrap();
         let payload_str = S::serialize_data(data)?;
         self.p_data = to_trytes(&encode_config(&payload_str, URL_SAFE_NO_PAD))
             .map_err(|e| anyhow::anyhow!("{:#?}", e))?;
@@ -123,7 +122,6 @@ where
     where
         T: Serialize,
     {
-        // let json_payload = serde_json::to_string(data).unwrap();
         let payload_str = S::serialize_data(data)?;
         self.m_data = to_trytes(&encode_config(&payload_str, URL_SAFE_NO_PAD))
             .map_err(|e| anyhow::anyhow!("{:#?}", e))?;

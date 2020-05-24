@@ -107,7 +107,7 @@ where
         _opt: Self::RecvOptions,
     ) -> anyhow::Result<Vec<TbinaryMessage<TW, F, TangleAddress<TW>>>> {
         let addr_str = link.appinst.to_string();
-        //        let tag_str = link.msgid.to_string();
+        let tag_str = link.msgid.to_string();
 
         let hashes_resp = iota::Client::find_transactions()
             .addresses(&vec![Address::from_inner_unchecked(
@@ -116,12 +116,12 @@ where
                     .as_trits()
                     .encode(),
             )])
-            //            .tags(&vec![Tag::from_inner_unchecked(
-            //                TryteBuf::try_from_str(&tag_str)
-            //                    .unwrap()
-            //                    .as_trits()
-            //                    .encode(),
-            //            )])
+            .tags(&vec![Tag::from_inner_unchecked(
+                TryteBuf::try_from_str(&tag_str)
+                    .unwrap()
+                    .as_trits()
+                    .encode(),
+            )])
             .send()
             .await
             .unwrap();
@@ -150,15 +150,15 @@ where
         _opt: Self::RecvOptions,
     ) -> anyhow::Result<Option<TbinaryMessage<TW, F, TangleAddress<TW>>>> {
         let tag_str = link.msgid.to_string();
-        // let addr_str = link.appinst.to_string();
+        let addr_str = link.appinst.to_string();
 
         let hashes_resp = iota::Client::find_transactions()
-            //.addresses(&vec![Address::from_inner_unchecked(
-            //    TryteBuf::try_from_str(&addr_str)
-            //        .unwrap()
-            //        .as_trits()
-            //        .encode(),
-            //)])
+            .addresses(&vec![Address::from_inner_unchecked(
+                TryteBuf::try_from_str(&addr_str)
+                    .unwrap()
+                    .as_trits()
+                    .encode(),
+            )])
             .tags(&vec![Tag::from_inner_unchecked(
                 TryteBuf::try_from_str(&tag_str)
                     .unwrap()
@@ -173,8 +173,10 @@ where
         let txs = bundles_from_transactions(&txs_resp.trytes);
         let mut msgs: Vec<TbinaryMessage<TW, F, TangleAddress<TW>>> = txs
             .iter()
-            .rev()
             .map(|bundle| bundle_to_message(bundle))
+            .filter(|message| {
+                message.link.msgid == link.msgid && message.link.appinst == link.appinst
+            })
             .collect();
         Ok(msgs.pop())
     }

@@ -70,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
     //
     let mut subscriber = Subscriber::new(seed, true);
 
-    println!("Channel Address={}", channel_address);
+    println!("\n\nChannel Address={}", channel_address);
     println!("Announcement Tag ID={}", announcement_tag);
 
     // Create the announcement Link
@@ -93,6 +93,9 @@ async fn main() -> anyhow::Result<()> {
                 .unwrap_announcement(preparsed)
                 .map_err(|_| anyhow::anyhow!("Error unwraping the announcement message"))?;
         }
+    } else {
+        println!("No Announce Message");
+        std::process::exit(1);
     }
 
     print!("Subscribe to the channel ..");
