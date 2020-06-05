@@ -10,6 +10,7 @@ use iota::{
     },
     ternary::TryteBuf,
 };
+
 use iota_conversion::Trinary;
 use std::{str::FromStr, string::ToString};
 
@@ -173,6 +174,7 @@ where
         let txs = bundles_from_transactions(&txs_resp.trytes);
         let mut msgs: Vec<TbinaryMessage<TW, F, TangleAddress<TW>>> = txs
             .iter()
+            .rev()
             .map(|bundle| bundle_to_message(bundle))
             .filter(|message| {
                 message.link.msgid == link.msgid && message.link.appinst == link.appinst
@@ -257,12 +259,16 @@ where
 
     let appinst = AppInst::from_str(&addr).unwrap();
     let msgid = MsgId::from_str(&tag).unwrap();
-
     let mut body = Tbits::<TW>::zero(0);
+    let mut indexes = Vec::new();
 
     for tx in bundle.into_iter() {
-        body += &Tbits::<TW>::from_str(&tx.payload().to_inner().as_i8_slice().trytes().unwrap())
-            .unwrap();
+        let current_index = tx.index();
+        if !indexes.iter().any(|it| *it == current_index) {
+            let payload = tx.payload().to_inner().as_i8_slice().trytes().unwrap();
+            body += &Tbits::<TW>::from_str(&payload).unwrap();
+            indexes.push(tx.index());
+        }
     }
     TbinaryMessage::new(TangleAddress::<TW> { appinst, msgid }, body)
 }
