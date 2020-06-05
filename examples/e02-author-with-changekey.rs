@@ -44,6 +44,12 @@ async fn main() -> anyhow::Result<()> {
                 .takes_value(true)
                 .help("Merkle Tree Signature Height, Default: 3"),
         )
+        .arg(
+            Arg::with_name("use_ntru")
+                .short("u")
+                .long("use-ntru")
+                .help("Stream Subscriber use NTRU"),
+        )
         .get_matches();
 
     let api_url = matches
@@ -57,13 +63,14 @@ async fn main() -> anyhow::Result<()> {
         .parse()
         .unwrap_or(3);
 
+    let use_ntru = matches.is_present("use_ntru");
     // Initialize The IOTA Client
     //
     let mut client = IotaTransport::add_node(api_url).unwrap();
 
     // Create the author
     //
-    let mut author = Author::new(seed, mss_height, true);
+    let mut author = Author::new(seed, mss_height, use_ntru);
 
     println!("\rChannel Address (Copy this Address for the Subscribers):");
     println!("\t{}\n", author.channel_address());
@@ -121,7 +128,7 @@ async fn main() -> anyhow::Result<()> {
         .await
         .unwrap();
 
-        tokio::time::delay_for(Duration::from_secs(1)).await;
+        tokio::time::delay_for(Duration::from_secs(10)).await;
     }
 }
 

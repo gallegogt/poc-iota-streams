@@ -48,10 +48,16 @@ async fn main() -> anyhow::Result<()> {
         .arg(
             Arg::with_name("announcement_tag")
                 .short("n")
-                .long("announcement_tag")
+                .long("announcement-tag")
                 .takes_value(true)
                 .required(true)
                 .help("Stream Annuncement Tag"),
+        )
+        .arg(
+            Arg::with_name("use_ntru")
+                .short("u")
+                .long("use-ntru")
+                .help("Stream Subscriber use NTRU"),
         )
         .get_matches();
 
@@ -61,6 +67,7 @@ async fn main() -> anyhow::Result<()> {
     let seed = matches.value_of("seed").unwrap();
     let channel_address = matches.value_of("channel_address").unwrap();
     let announcement_tag = matches.value_of("announcement_tag").unwrap();
+    let use_ntru = matches.is_present("use_ntru");
 
     // Initialize the IOTA Client
     //
@@ -68,7 +75,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Create subscriber
     //
-    let mut subscriber = Subscriber::new(seed, true);
+    let mut subscriber = Subscriber::new(seed, use_ntru);
 
     println!("\n\nChannel Address={}", channel_address);
     println!("Announcement Tag ID={}", announcement_tag);
@@ -98,11 +105,13 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    print!("Subscribe to the channel ..");
-    let _msg = subscriber
-        .subscribe(&announcement_link)
-        .map_err(|_| anyhow::anyhow!("Error on subscriber link"))?;
-    print!("[OK]\n\r");
+    if use_ntru {
+        print!("Subscribe to the channel ..");
+        let _msg = subscriber
+            .subscribe(&announcement_link)
+            .map_err(|_| anyhow::anyhow!("Error on subscriber link"))?;
+        print!("[OK]\n\r");
+    }
 
     // Receive all published messages
     //

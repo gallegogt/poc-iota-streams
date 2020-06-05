@@ -47,10 +47,16 @@ async fn main() -> anyhow::Result<()> {
         .arg(
             Arg::with_name("announcement_tag")
                 .short("n")
-                .long("announcement_tag")
+                .long("announcement-tag")
                 .takes_value(true)
                 .required(true)
                 .help("Stream Annuncement Tag"),
+        )
+        .arg(
+            Arg::with_name("use_ntru")
+                .short("u")
+                .long("use-ntru")
+                .help("Stream Subscriber use NTRU"),
         )
         .get_matches();
 
@@ -67,7 +73,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Create subscriber
     //
-    let mut subscriber = Subscriber::new(seed, true);
+    let use_ntru = matches.is_present("use_ntru");
+    let mut subscriber = Subscriber::new(seed, use_ntru);
 
     println!("Channel Address={}", channel_address);
     println!("Announcement Tag ID={}", announcement_tag);

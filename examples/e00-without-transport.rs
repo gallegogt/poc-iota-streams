@@ -43,6 +43,12 @@ async fn main() -> anyhow::Result<()> {
                 .takes_value(true)
                 .help("Merkle Tree Signature Height, Default: 3"),
         )
+        .arg(
+            Arg::with_name("use_ntru")
+                .short("u")
+                .long("use-ntru")
+                .help("Stream Subscriber use NTRU"),
+        )
         .get_matches();
 
     let seed = matches.value_of("seed").unwrap();
@@ -52,13 +58,14 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or("3")
         .parse()
         .unwrap_or(3);
+    let use_ntru = matches.is_present("use_ntru");
 
     // Create the author
     //
-    let mut author = Author::new(seed, mss_height, true);
+    let mut author = Author::new(seed, mss_height, use_ntru);
     // Create subscriber
     //
-    let mut subscriber = Subscriber::new(seed_sub, true);
+    let mut subscriber = Subscriber::new(seed_sub, use_ntru);
 
     println!("\rChannel Address (Copy this Address for the Subscribers):");
     println!("\t{}\n", author.channel_address());
