@@ -20,24 +20,20 @@ path = "src/lib.rs"
 
 
 [dependencies]
-iota-streams = { git = "https://github.com/iotaledger/streams.git" }
+iota-streams = { git = "https://github.com/iotaledger/streams.git", branch="chrysalis-2",  default-features = false, features = ["std", "tangle", "async-client", "async"] }
 anyhow = "1.0"
-# iota-core = { path = "../iota.rs/iota-core" }
-iota-core = { git = "https://github.com/iotaledger/iota.rs.git" }
-iota-conversion = { git = "https://github.com/iotaledger/iota.rs.git" }
-tokio = { version = "^0.2", features = ["full"] }
-async-trait = "0.1.30"
+
+tokio = { version = "1", features = ["full"] }
 chrono = { version = "^0.4", features = ["serde"]}
 serde = { version = "^1.0", features=["derive"] }
 serde_json = "^1.0"
-base64 = "^0.12"
 rand = "^0.7"
 
 [dev-dependencies]
 clap = "^2.33"
-# piper = "0.1.1"
 
 [profile.release]
-lto = true
+# lto = true
+lto = "fat"
 opt-level = 3
 codegen-units = 1
