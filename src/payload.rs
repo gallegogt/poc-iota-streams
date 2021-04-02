@@ -1,13 +1,9 @@
 //!
 //! Payload Module
 //!
-use base64::{decode_config, encode_config, URL_SAFE_NO_PAD};
-use iota_conversion::trytes_converter::{to_string as trytes_to_string, to_trytes};
-use iota_streams::{
-    app_channels::api::tangle::DefaultTW, core::tbits::Tbits, protobuf3::types::Trytes,
-};
+use iota_streams::ddml::types::Bytes;
 use serde::{de::DeserializeOwned, Serialize};
-use std::{marker::PhantomData, str::FromStr};
+use std::marker::PhantomData;
 
 ///
 /// Simple Trait to transform the payload to string using any serde serializer
@@ -31,19 +27,19 @@ pub trait PacketPayload {
     ///
     /// Return the public payload data
     ///
-    fn public_data(&self) -> &Trytes<DefaultTW>;
+    fn public_data(&self) -> &Bytes;
     ///
     /// Return the masked payload data
     ///
-    fn masked_data(&self) -> &Trytes<DefaultTW>;
+    fn masked_data(&self) -> &Bytes;
 }
 
 ///
 /// Packet
 ///
 pub struct Payload<S> {
-    public: Trytes<DefaultTW>,
-    masked: Trytes<DefaultTW>,
+    public: Bytes,
+    masked: Bytes,
     _marker: PhantomData<S>,
 }
 
@@ -54,7 +50,7 @@ where
     ///
     /// Unwrap JSON Data
     ///
-    pub fn unwrap_data<T>(data: &Trytes<DefaultTW>) -> anyhow::Result<Option<T>>
+    pub fn unwrap_data<T>(data: &Bytes) -> anyhow::Result<Option<T>>
     where
         T: DeserializeOwned,
     {
@@ -62,18 +58,17 @@ where
         if data_str.len() == 0 {
             return Ok(None);
         }
-        let raw = trytes_to_string(&data.to_string())
-            .map_err(|_| anyhow::anyhow!("Error on convert payload from trytes"))?;
-        let decode_data = decode_config(&raw, URL_SAFE_NO_PAD)?;
-        Ok(Some(S::deserialize_data(&decode_data)?))
+        let raw = String::from_utf8(data.0.clone()).unwrap();
+        // let decode_data = decode_config(&raw, URL_SAFE)?;
+        Ok(Some(S::deserialize_data(&raw.as_bytes())?))
     }
 }
 
 impl<S> PacketPayload for Payload<S> {
-    fn public_data(&self) -> &Trytes<DefaultTW> {
+    fn public_data(&self) -> &Bytes {
         &self.public
     }
-    fn masked_data(&self) -> &Trytes<DefaultTW> {
+    fn masked_data(&self) -> &Bytes {
         &self.masked
     }
 }
@@ -109,9 +104,8 @@ where
     where
         T: Serialize,
     {
-        let payload_str = S::serialize_data(data)?;
-        self.p_data = to_trytes(&encode_config(&payload_str, URL_SAFE_NO_PAD))
-            .map_err(|e| anyhow::anyhow!("{:#?}", e))?;
+        self.p_data = S::serialize_data(data)?;
+        // self.p_data = encode_config(&payload_str, URL_SAFE);
         Ok(self)
     }
 
@@ -122,9 +116,8 @@ where
     where
         T: Serialize,
     {
-        let payload_str = S::serialize_data(data)?;
-        self.m_data = to_trytes(&encode_config(&payload_str, URL_SAFE_NO_PAD))
-            .map_err(|e| anyhow::anyhow!("{:#?}", e))?;
+        self.p_data = S::serialize_data(data)?;
+        // self.m_data = encode_config(&payload_str, URL_SAFE);
         Ok(self)
     }
 
@@ -133,8 +126,8 @@ where
     ///
     pub fn build(&self) -> Payload<S> {
         Payload {
-            public: Trytes(Tbits::from_str(&self.p_data).unwrap()),
-            masked: Trytes(Tbits::from_str(&self.m_data).unwrap()),
+            public: Bytes(self.p_data.as_bytes().to_vec()),
+            masked: Bytes(self.m_data.as_bytes().to_vec()),
             _marker: PhantomData,
         }
     }

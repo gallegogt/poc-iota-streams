@@ -11,12 +11,18 @@
 //! ```
 //!
 use clap::{App, Arg};
-use iota_streams::app_channels::api::tangle::{Address, Author};
+use iota_streams::{
+    app::transport::tangle::PAYLOAD_BYTES,
+    app_channels::api::tangle::{Address, Author, Transport},
+};
+// use std::cell::RefCell;
+
 use poc::{
     payload::{json::PayloadBuilder, PacketPayload},
     sample::StreamsData,
-    transport::{send_message, AsyncTransport, IotaTransport},
+    transport::build_transport,
 };
+
 use std::time::Duration;
 
 #[tokio::main]
@@ -35,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
                 .short("p")
                 .long("url")
                 .takes_value(true)
-                .default_value("https://nodes.comnet.thetangle.org:443")
+                .default_value("https://api.lb-0.testnet.chrysalis2.com")
                 .help("The Tangle Url, Default: https://nodes.comnet.thetangle.org:443"),
         )
         .arg(
@@ -46,10 +52,10 @@ async fn main() -> anyhow::Result<()> {
                 .help("Merkle Tree Signature Height, Default: 3"),
         )
         .arg(
-            Arg::with_name("use_ntru")
-                .short("u")
-                .long("use-ntru")
-                .help("Stream Subscriber use NTRU"),
+            Arg::with_name("encoding")
+                .long("encoding")
+                .default_value("utf-8")
+                .help("Encoding, Default UTF-8"),
         )
         .get_matches();
 
@@ -58,37 +64,34 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or("https://nodes.comnet.thetangle.org:443");
 
     let seed = matches.value_of("seed").unwrap();
+    let encoding = matches.value_of("encoding").unwrap();
     let mss_height: usize = matches
         .value_of("mss_height")
         .unwrap_or("3")
         .parse()
         .unwrap_or(3);
 
-    let use_ntru = matches.is_present("use_ntru");
-    // Initialize The IOTA Client
-    //
-    let mut client = IotaTransport::add_node(api_url).unwrap();
+    let transport = build_transport(api_url, 9);
 
     // Create the author
     //
-    let mut author = Author::new(seed, mss_height, use_ntru);
+    let mut author = Author::new(seed, encoding, PAYLOAD_BYTES, false, transport.clone());
 
     println!("\rChannel Address (Copy this Address for the Subscribers):");
-    println!("\t{}\n", author.channel_address());
+    println!("\t{:?}\n", author.channel_address().unwrap());
 
     // Creare Announcement Tag
     //
-    let (announcement_address, announcement_tag) = {
+    let announcement_link = {
         let msg = &author
-            .announce()
+            .send_announce()
+            .await
             .map_err(|_| anyhow::anyhow!("Error creating announce message"))?;
 
-        send_message(&mut client, msg).await.unwrap();
-
         println!("Announcement Message Tag:");
-        println!("\t{}\n", msg.link.msgid);
+        println!("\t{}\n", msg.msgid);
 
-        (msg.link.appinst.to_string(), msg.link.msgid.to_string())
+        msg.clone()
     };
 
     // Posible numbers of messages to sign before change the key
@@ -96,28 +99,27 @@ async fn main() -> anyhow::Result<()> {
     let remaining_sk = 2_u32.pow(mss_height as u32);
     let mut remaining_signed_messages = remaining_sk;
 
+    let mut linked_ = announcement_link.clone();
     // Announcement Link
     //
-    let announcement_link = Address::from_str(&announcement_address, &announcement_tag).unwrap();
     loop {
         if remaining_signed_messages <= 0 {
             break;
         } else {
             remaining_signed_messages = remaining_signed_messages - 1;
         }
-
-        let _link_signed = send_signed_data(
-            &mut client,
+        let data = StreamsData::default();
+        println!("DATA={:?}", &data);
+        let _link_signed = send_tagged_data(
             &mut author,
-            &announcement_link,
-            PayloadBuilder::new()
-                .masked(&StreamsData::default())?
-                .build(),
+            &linked_,
+            PayloadBuilder::new().masked(&data)?.build(),
         )
         .await
         .unwrap();
 
-        tokio::time::delay_for(Duration::from_secs(10)).await;
+        linked_ = _link_signed;
+        tokio::time::sleep(Duration::from_secs(10)).await;
     }
 
     Ok(())
@@ -126,24 +128,23 @@ async fn main() -> anyhow::Result<()> {
 ///
 /// Send a signed message
 ///
-async fn send_signed_data<'a, T, P>(
-    client: &mut T,
-    author: &mut Author,
+async fn send_tagged_data<'a, T, P>(
+    author: &mut Author<T>,
     addrs: &Address,
     payload: P,
 ) -> anyhow::Result<Address>
 where
-    T: AsyncTransport + Send,
-    <T>::SendOptions: Copy + Default + Send,
+    T: Transport + Clone,
     P: PacketPayload,
 {
     let signed_packet_link = {
-        let msg = author
-            .sign_packet(&addrs, &payload.public_data(), &payload.masked_data())
+        let (msg, seq) = author
+            .send_tagged_packet(&addrs, &payload.public_data(), &payload.masked_data())
+            .await
             .map_err(|_| anyhow::anyhow!("Error to create signed packet"))?;
-        println!("\tSigned Message ID={}", msg.link.msgid);
-        send_message(client, &msg).await.unwrap();
-        msg.link.clone()
+        println!("\tTagged Message ID={} {:?}", msg.msgid, msg);
+        println!("\tSeq={:?}", seq);
+        msg
     };
     Ok(signed_packet_link)
 }

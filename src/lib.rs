@@ -7,7 +7,7 @@ pub mod transport;
 pub mod sample {
     use crate::payload::json::Payload;
     use chrono::{Local, NaiveDateTime};
-    use iota_streams::{app_channels::api::tangle::DefaultTW, protobuf3::types::Trytes};
+    use iota_streams::ddml::types::Bytes;
     use rand::Rng;
     use serde::{Deserialize, Serialize};
 
@@ -71,7 +71,7 @@ pub mod sample {
 
     /// Print message payload
     ///
-    pub fn print_message_payload<T>(prefix: T, public: Trytes<DefaultTW>, masked: Trytes<DefaultTW>)
+    pub fn print_message_payload<T>(prefix: T, public: Bytes, masked: Bytes)
     where
         T: Into<String>,
     {
