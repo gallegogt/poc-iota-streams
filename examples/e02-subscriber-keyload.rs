@@ -15,23 +15,23 @@ use iota_streams::{
     app_channels::api::tangle::{Address, Subscriber},
 };
 use poc::{
-    sample::print_message_payload,
-    transport::{build_transport, s_fetch_next_messages},
+    sample::{make_random_seed, print_message_payload},
+    transport::{build_transport, s_fetch_next_messages, FetchMessageContentType},
 };
-use tokio::io::{AsyncBufReadExt, BufReader, stdin};
 use regex::Regex;
-
+use tokio::io::{stdin, AsyncBufReadExt, BufReader};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let rseed = make_random_seed();
     let matches = App::new("Simple IOTA Streams Subscriber")
         .version("1.0")
         .arg(
             Arg::with_name("seed")
                 .short("s")
                 .long("seed")
-                .required(true)
-                .takes_value(true),
+                .takes_value(true)
+                .default_value(&rseed),
         )
         .arg(
             Arg::with_name("url")
@@ -74,6 +74,7 @@ async fn main() -> anyhow::Result<()> {
     let api_url = matches
         .value_of("url")
         .unwrap_or("https://nodes.comnet.thetangle.org:443");
+
     let seed = matches.value_of("seed").unwrap();
     let channel_address = matches.value_of("channel_address").unwrap();
     let announcement_tag = matches.value_of("announcement_tag").unwrap();
@@ -113,25 +114,36 @@ async fn main() -> anyhow::Result<()> {
 
     {
         let msg = subscriber.send_subscribe(&announcement_link).await.unwrap();
-        println!("Subscriber ID: {} (Copy and paste on author example) \n", msg.msgid);
+        println!(
+            "Subscriber ID: {} (Copy and paste on author example) \n",
+            msg.msgid
+        );
         println!("SET \"{}\" \n", msg.msgid);
     };
 
-
     let mut lines = BufReader::new(stdin()).lines();
 
-    println!("Type Keyload Message ID (Example: SET \"e2feafdd5c6a72cef26ea3b2\" ) and press enter \n");
+    println!(
+        "Type Keyload Message ID (Example: SET \"e2feafdd5c6a72cef26ea3b2\" ) and press enter \n"
+    );
 
     while let Some(line) = lines.next_line().await.unwrap() {
         match Regex::new("SET\\s+\"(?P<target>[[:alnum:]]{20,32}?)\"") {
             Ok(regex) => {
                 if let Some(capture) = regex.captures(&line) {
-                    if let Some(keyload_id) = capture.name("target").and_then(|s| Some(s.as_str().trim())) {
-                        subscriber.receive_keyload(
-                            &Address::from_str(
-                                &format!("{}", announcement_link.appinst),
-                                &keyload_id).unwrap()
-                        ).await.unwrap();
+                    if let Some(keyload_id) =
+                        capture.name("target").and_then(|s| Some(s.as_str().trim()))
+                    {
+                        subscriber
+                            .receive_keyload(
+                                &Address::from_str(
+                                    &format!("{}", announcement_link.appinst),
+                                    &keyload_id,
+                                )
+                                .unwrap(),
+                            )
+                            .await
+                            .unwrap();
 
                         println!("Received Keyload {} \n", keyload_id);
                         break;
@@ -139,42 +151,39 @@ async fn main() -> anyhow::Result<()> {
                 } else {
                     eprintln!("Missing argument keyload id...")
                 }
-            },
-            Err(_) => println!("Try again ...")
+            }
+            Err(_) => println!("Try again ..."),
         }
     }
 
     if message_id.is_empty() {
         // Lis all data linked in the channel
         //
-        let mut msg_list = s_fetch_next_messages(&mut subscriber).await;
+        let mut msg_list =
+            s_fetch_next_messages(&mut subscriber, FetchMessageContentType::SignedPacket, true)
+                .await;
 
         while msg_list.len() > 0 {
-            for (idx, msg) in msg_list.iter().enumerate() {
-                // Skip first message
-                // Avoid error on unwrap not signed packet type
-                if idx == 0 {
-                    continue;
-                }
-
-                match subscriber.receive_signed_packet(&msg).await {
-                    Ok((_signer_pk, unwrapped_public, unwrapped_masked)) => {
-                        print_message_payload(
-                            format!("{}.- Signed", idx),
-                            unwrapped_public,
-                            unwrapped_masked,
-                        );
-                    } Err(_) => {
-                        eprintln!("This message is not Signed Message {}", msg.msgid);
-                    }
-                }
+            for (idx, (msg, unwrapped_public, unwrapped_masked)) in msg_list.iter().enumerate() {
+                print_message_payload(
+                    format!("{}.- Signed ({})", idx, msg),
+                    &unwrapped_public,
+                    &unwrapped_masked,
+                );
             }
-            msg_list = s_fetch_next_messages(&mut subscriber).await;
+            msg_list =
+                s_fetch_next_messages(&mut subscriber, FetchMessageContentType::SignedPacket, true)
+                    .await;
         }
     } else {
         // Get Linked Data
         //
-        let _ = s_fetch_next_messages(&mut subscriber).await;
+        let _ = s_fetch_next_messages(
+            &mut subscriber,
+            FetchMessageContentType::SignedPacket,
+            false,
+        )
+        .await;
         let message_link = Address::from_str(&channel_address, &message_id).unwrap();
         // Access to specific message
         //
@@ -183,7 +192,7 @@ async fn main() -> anyhow::Result<()> {
             .await
             .unwrap();
 
-        print_message_payload(format!("{} - Signed", message_id), uw_public, uw_masked);
+        print_message_payload(format!("{} - Signed", message_id), &uw_public, &uw_masked);
     }
 
     Ok(())

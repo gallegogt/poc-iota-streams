@@ -15,19 +15,20 @@ use iota_streams::{
     app_channels::api::tangle::{Address, Subscriber},
 };
 use poc::{
-    sample::print_message_payload,
-    transport::{build_transport, s_fetch_next_messages},
+    sample::{print_message_payload, make_random_seed},
+    transport::{build_transport, s_fetch_next_messages, FetchMessageContentType},
 };
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let rseed = make_random_seed();
     let matches = App::new("Simple IOTA Streams Subscriber")
         .version("1.0")
         .arg(
             Arg::with_name("seed")
                 .short("s")
                 .long("seed")
-                .required(true)
+                .default_value(&rseed)
                 .takes_value(true),
         )
         .arg(
@@ -111,24 +112,35 @@ async fn main() -> anyhow::Result<()> {
     if message_id.is_empty() {
         // Lis all data linked in the channel
         //
-        let mut msg_list = s_fetch_next_messages(&mut subscriber).await;
+        let mut msg_list =
+            s_fetch_next_messages(
+                &mut subscriber,
+                FetchMessageContentType::TaggedPacket,
+                true
+            ).await;
 
         while msg_list.len() > 0 {
-            for (idx, msg) in msg_list.iter().enumerate() {
-                let (unwrapped_public, unwrapped_masked) =
-                    subscriber.receive_tagged_packet(&msg).await.unwrap();
+            for (idx, (address, unwrapped_public, unwrapped_masked)) in msg_list.iter().enumerate()
+            {
                 print_message_payload(
-                    format!("{}.- Tagged", idx),
-                    unwrapped_public,
-                    unwrapped_masked,
+                    format!("{}.- Tagged ({})", idx, address),
+                    &unwrapped_public,
+                    &unwrapped_masked,
                 );
             }
-            msg_list = s_fetch_next_messages(&mut subscriber).await;
+            msg_list =
+                s_fetch_next_messages(&mut subscriber, FetchMessageContentType::TaggedPacket, true)
+                    .await;
         }
     } else {
         // Get Linked Data
         //
-        let _ = s_fetch_next_messages(&mut subscriber).await;
+        let _ = s_fetch_next_messages(
+            &mut subscriber,
+            FetchMessageContentType::TaggedPacket,
+            false,
+        )
+        .await;
         let message_link = Address::from_str(&channel_address, &message_id).unwrap();
         // Access to specific message
         //
@@ -137,7 +149,7 @@ async fn main() -> anyhow::Result<()> {
             .await
             .unwrap();
 
-        print_message_payload(format!("{} - Tagged", message_id), uw_public, uw_masked);
+        print_message_payload(format!("{} - Tagged", message_id), &uw_public, &uw_masked);
     }
 
     Ok(())

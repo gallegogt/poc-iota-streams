@@ -20,7 +20,7 @@ use tokio::io::{AsyncBufReadExt, BufReader, stdin};
 
 use poc::{
     payload::{json::PayloadBuilder, PacketPayload},
-    sample::StreamsData,
+    sample::{StreamsData, make_random_seed, get_message_index},
     transport::build_transport,
 };
 
@@ -28,13 +28,14 @@ use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let rseed = make_random_seed();
     let matches = App::new("Simple IOTA Streams Author")
         .version("1.0")
         .arg(
             Arg::with_name("seed")
                 .short("s")
                 .long("seed")
-                .required(true)
+                .default_value(&rseed)
                 .takes_value(true),
         )
         .arg(
@@ -180,8 +181,9 @@ where
             .send_signed_packet(&addrs, &payload.public_data(), &payload.masked_data())
             .await
             .map_err(|_| anyhow::anyhow!("Error to create signed packet"))?;
-        println!("\tSigned Message ID={} {:?}", msg.msgid, msg);
-        println!("\tSeq={:?}", seq);
+        println!("\tSigned Message ID={}", msg.msgid);
+        println!("\tSEQ={:?}", seq);
+        println!("\tMessageIndexed={:?}", get_message_index(&msg));
         msg
     };
     Ok(signed_packet_link)

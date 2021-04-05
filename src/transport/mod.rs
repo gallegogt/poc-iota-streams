@@ -8,8 +8,11 @@ use iota_streams::{
         tangle::client::{Client, SendOptions},
         TransportOptions,
     },
-    app_channels::api::tangle::{Address, Author, Subscriber, Transport, UnwrappedMessage},
+    app_channels::api::tangle::{
+        Address, Author, MessageContent, Subscriber, Transport, UnwrappedMessage,
+    },
     core::prelude::Rc,
+    ddml::types::Bytes,
 };
 use std::cell::RefCell;
 
@@ -24,18 +27,52 @@ pub fn build_transport<'a>(uri: &'a str, node_mwm: u8) -> Rc<RefCell<Client>> {
     transport
 }
 
-pub async fn s_fetch_next_messages<T: Transport>(subscriber: &mut Subscriber<T>) -> Vec<Address> {
+pub enum FetchMessageContentType {
+    SignedPacket,
+    TaggedPacket,
+}
+
+pub async fn s_fetch_next_messages<T: Transport>(
+    subscriber: &mut Subscriber<T>,
+    msgs_types: FetchMessageContentType,
+    load_data: bool,
+) -> Vec<(Address, Bytes, Bytes)> {
     let mut exists = true;
     let mut messages = Vec::new();
 
     while exists {
-        let msgs = subscriber.fetch_next_msgs();
-        exists = false;
+        let msgs = subscriber.fetch_next_msgs().await;
+        exists = msgs.len() > 0;
 
-        for msg in msgs.await {
-            println!("Message exists at {}... ", &msg.link.rel());
-            exists = true;
-            messages.push(msg.link);
+        if load_data {
+            for msg in msgs {
+                match &msg.body {
+                    MessageContent::SignedPacket {
+                        public_payload,
+                        masked_payload,
+                        ..
+                    } => match msgs_types {
+                        FetchMessageContentType::SignedPacket => messages.push((
+                            msg.link,
+                            public_payload.clone(),
+                            masked_payload.clone(),
+                        )),
+                        _ => {}
+                    },
+                    MessageContent::TaggedPacket {
+                        public_payload,
+                        masked_payload,
+                    } => match msgs_types {
+                        FetchMessageContentType::TaggedPacket => messages.push((
+                            msg.link,
+                            public_payload.clone(),
+                            masked_payload.clone(),
+                        )),
+                        _ => {}
+                    },
+                    _ => {}
+                }
+            }
         }
 
         if !exists {
@@ -50,10 +87,10 @@ pub async fn a_fetch_next_messages<T: Transport>(author: &mut Author<T>) -> Vec<
     let mut messages = Vec::new();
 
     while exists {
-        let msgs = author.fetch_next_msgs();
-        exists = false;
+        let msgs = author.fetch_next_msgs().await;
+        exists = msgs.len() > 0;
 
-        for msg in msgs.await {
+        for msg in msgs {
             println!("Message exists at {}... ", &msg.link.rel());
             messages.push(msg);
             exists = true;
@@ -66,41 +103,3 @@ pub async fn a_fetch_next_messages<T: Transport>(author: &mut Author<T>) -> Vec<
 
     messages
 }
-// ///
-// /// Read all messages in the thangle for this address
-// ///
-// pub async fn recv_messages<T>(transport: &mut T, addr: &Address) -> anyhow::Result<Vec<Message>>
-// where
-//     T: AsyncTransport,
-//     <T>::RecvOptions: Copy + Default + Send,
-// {
-//     let messages = transport
-//         .recv_messages_with_options(addr, T::RecvOptions::default())
-//         .await?;
-//     Ok(messages)
-// }
-//
-// ///
-// /// Read one message
-// ///
-// pub async fn recv_message<T>(transport: &mut T, addr: &Address) -> anyhow::Result<Option<Message>>
-// where
-//     T: AsyncTransport + Send,
-//     <T>::RecvOptions: Copy + Default + Send,
-// {
-//     transport.recv_message(addr).await
-// }
-//
-// ///
-// /// Send a message
-// ///
-// pub async fn send_message<T>(transport: &mut T, message: &Message) -> anyhow::Result<()>
-// where
-//     T: AsyncTransport + Send,
-//     <T>::SendOptions: Copy + Default + Send,
-// {
-//     match transport.send_message(message).await {
-//         Ok(_) => Ok(()),
-//         Err(e) => Err(e),
-//     }
-// }
