@@ -7,8 +7,9 @@ pub mod transport;
 pub mod sample {
     use crate::payload::json::Payload;
     use chrono::{Local, NaiveDateTime};
-    use iota_streams::ddml::types::Bytes;
-    use rand::Rng;
+    use crypto::hashes::{blake2b, Digest};
+    use iota_streams::{app_channels::api::tangle::Address, ddml::types::Bytes};
+    use rand::{Rng, distributions::Uniform};
     use serde::{Deserialize, Serialize};
 
     ///
@@ -58,20 +59,27 @@ pub mod sample {
         const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                                 abcdefghijklmnopqrstuvwxyz\
                                 0123456789 ;,.";
-        let mut rng = rand::thread_rng();
-
-        let rand_string: String = (0..len)
-            .map(|_| {
-                let idx = rng.gen_range(0, CHARSET.len());
-                CHARSET[idx] as char
-            })
-            .collect();
-        rand_string
+        rand::thread_rng()
+            .sample_iter(Uniform::new(0, CHARSET.len()))
+            .take(len)
+            .map(|i| CHARSET[i] as char)
+            .collect()
+    }
+    ///
+    /// Generate Random Seed
+    ///
+    pub fn make_random_seed() -> String {
+        const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ9";
+        rand::thread_rng()
+            .sample_iter(Uniform::new(0, CHARSET.len()))
+            .take(81)
+            .map(|i| CHARSET[i] as char)
+            .collect()
     }
 
     /// Print message payload
     ///
-    pub fn print_message_payload<T>(prefix: T, public: Bytes, masked: Bytes)
+    pub fn print_message_payload<T>(prefix: T, public: &Bytes, masked: &Bytes)
     where
         T: Into<String>,
     {
@@ -87,6 +95,12 @@ pub mod sample {
             Some(d) => println!("\n {} Masked Packet: \n \t{:?}\n", pfx, d),
             None => {}
         }
+    }
+
+    pub fn get_message_index(link: &Address) -> String {
+        let arr = [link.appinst.as_ref(), link.msgid.as_ref()].concat();
+        let hs = blake2b::Blake2b256::digest(&arr);
+        hex::encode(&hs)
     }
 }
 
