@@ -3,6 +3,13 @@
 ## Examples:
 
 * [E01 Simple Author](examples/e01-author.rs): Publish random data
+* [E01 Simple Subscriber](examples/e01-subscriber.rs): Fetch all message published by the Simple Author example
+* [E02 Simple Author with Keyload](examples/e02-author-keyload.rs): Publish random data
+* [E02 Simple Subscriber with keyload](examples/e02-subscriber-keyload.rs): Fetch all message published by the Simple Author with keyload example
+
+## Outputs Samples
+
+* [E01 Simple Author](examples/e01-author.rs): Publish random data
 
 **Output:**
 
@@ -85,8 +92,3 @@ Subscriber Channel Address 2bd36986053a06f546e0e3f525ad849e5cc1610fe65ade1cc4e43
 No more messages in sequence.
 
 ```
-
-
-* [E02 Simple Author with Keyload](examples/e02-author-keyload.rs): Publish random data
-
-* [E01 Simple Subscriber with keyload](examples/e02-subscriber-keyload.rs): Fetch all message published by the Simple Author with keyload example
